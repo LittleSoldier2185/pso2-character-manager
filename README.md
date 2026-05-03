@@ -1,5 +1,7 @@
 # PSO2 Character Data Manager
 
+> ⚠️ **This is a prototype version.** The app is functional but still in early development. Features may change, and bugs may be present. Feedback and contributions are welcome!
+
 A Windows desktop app built with Flutter for managing Phantasy Star Online 2 character data files locally.
 
 PSO2's salon mode can only display 50 character files at a time. This app acts as an unlimited local library to store, organize, and search your character data outside the game.
