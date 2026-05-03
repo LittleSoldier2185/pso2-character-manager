@@ -1,0 +1,1 @@
+# PSO2-Character-Manager
