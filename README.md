@@ -50,7 +50,7 @@ Go to the [Releases](../../releases) page and download the latest ZIP. Unzip it 
 
 ```bash
 # 1. Clone the repo
-git clone https://github.com/YOUR_USERNAME/pso2-character-manager.git
+git clone https://github.com/LittleSoldier2185/pso2-character-manager.git
 cd pso2-character-manager
 
 # 2. Get packages
