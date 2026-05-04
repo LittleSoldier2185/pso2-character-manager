@@ -1,26 +1,53 @@
 import 'package:flutter/material.dart';
 
-class AppTheme {
-  static const Color bgDark = Color(0xFF0D1117);
-  static const Color bgCard = Color(0xFF161B22);
-  static const Color bgSurface = Color(0xFF1C2128);
-  static const Color accent = Color(0xFF00B4D8);
-  static const Color accentGold = Color(0xFFFFC107);
-  static const Color textPrimary = Color(0xFFE6EDF3);
-  static const Color textSecondary = Color(0xFF8B949E);
-  static const Color borderColor = Color(0xFF30363D);
+// Accent color presets — PSO2-inspired palette
+class AccentPreset {
+  final String name;
+  final Color color;
+  const AccentPreset(this.name, this.color);
+}
 
-  static const Color humanColor = Color(0xFF58A6FF);
+class AppTheme {
+  // ── Accent presets ─────────────────────────────────────────────
+  static const List<AccentPreset> accentPresets = [
+    AccentPreset('Cyan',    Color(0xFF00B4D8)),
+    AccentPreset('Azure',   Color(0xFF3B82F6)),
+    AccentPreset('Purple',  Color(0xFFBC8CFF)),
+    AccentPreset('Gold',    Color(0xFFFFC107)),
+    AccentPreset('Green',   Color(0xFF3FB950)),
+    AccentPreset('Coral',   Color(0xFFFF7B72)),
+  ];
+
+  // Active accent — defaults to Cyan, can be changed in Settings
+  static Color _accent = const Color(0xFF00B4D8);
+  static Color get accent => _accent;
+
+  static void setAccent(Color color) {
+    _accent = color;
+  }
+
+  // ── Base colors (never change) ─────────────────────────────────
+  static const Color bgDark    = Color(0xFF0D1117);
+  static const Color bgCard    = Color(0xFF161B22);
+  static const Color bgSurface = Color(0xFF1C2128);
+  static const Color accentGold      = Color(0xFFFFC107);
+  static const Color textPrimary     = Color(0xFFE6EDF3);
+  static const Color textSecondary   = Color(0xFF8B949E);
+  static const Color borderColor     = Color(0xFF30363D);
+
+  // ── Race colors ────────────────────────────────────────────────
+  static const Color humanColor  = Color(0xFF58A6FF);
   static const Color newmanColor = Color(0xFFBC8CFF);
   static const Color deumanColor = Color(0xFFFF7B72);
-  static const Color castColor = Color(0xFF3FB950);
+  static const Color castColor   = Color(0xFF3FB950);
 
-  static ThemeData get darkTheme {
+  // ── Theme builder ──────────────────────────────────────────────
+  static ThemeData buildTheme(Color accentColor) {
     return ThemeData(
       brightness: Brightness.dark,
       scaffoldBackgroundColor: bgDark,
-      colorScheme: const ColorScheme.dark(
-        primary: accent,
+      colorScheme: ColorScheme.dark(
+        primary: accentColor,
         secondary: accentGold,
         surface: bgSurface,
         onPrimary: bgDark,
@@ -60,21 +87,21 @@ class AppTheme {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: accent, width: 2),
+          borderSide: BorderSide(color: accentColor, width: 2),
         ),
         labelStyle: const TextStyle(color: textSecondary),
         hintStyle: const TextStyle(color: textSecondary),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: accent,
+          backgroundColor: accentColor,
           foregroundColor: bgDark,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: accent),
+        style: TextButton.styleFrom(foregroundColor: accentColor),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: bgSurface,
@@ -84,16 +111,16 @@ class AppTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: bgCard,
-        indicatorColor: accent.withOpacity(0.2),
+        indicatorColor: accentColor.withOpacity(0.2),
         labelTextStyle: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const TextStyle(color: accent, fontSize: 12);
+            return TextStyle(color: accentColor, fontSize: 12);
           }
           return const TextStyle(color: textSecondary, fontSize: 12);
         }),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           if (states.contains(WidgetState.selected)) {
-            return const IconThemeData(color: accent);
+            return IconThemeData(color: accentColor);
           }
           return const IconThemeData(color: textSecondary);
         }),
@@ -110,18 +137,16 @@ class AppTheme {
     );
   }
 
+  // Convenience getter using current accent
+  static ThemeData get darkTheme => buildTheme(_accent);
+
   static Color raceColor(String race) {
     switch (race.toLowerCase()) {
-      case 'human':
-        return humanColor;
-      case 'newman':
-        return newmanColor;
-      case 'deuman':
-        return deumanColor;
-      case 'cast':
-        return castColor;
-      default:
-        return textSecondary;
+      case 'human':  return humanColor;
+      case 'newman': return newmanColor;
+      case 'deuman': return deumanColor;
+      case 'cast':   return castColor;
+      default:       return textSecondary;
     }
   }
 }

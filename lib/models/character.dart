@@ -26,10 +26,22 @@ class Character extends HiveObject {
   List<String> tags;
 
   @HiveField(7)
-  String? collectionId;
+  String? collectionId; // kept for legacy migration, use collectionIds
 
   @HiveField(8)
   late DateTime createdAt;
+
+  @HiveField(9)
+  bool isApplied;
+
+  @HiveField(10)
+  int? slotNumber;
+
+  @HiveField(11)
+  String description;
+
+  @HiveField(12)
+  List<String> collectionIds; // multi-collection support
 
   Character({
     required this.id,
@@ -41,7 +53,12 @@ class Character extends HiveObject {
     List<String>? tags,
     this.collectionId,
     DateTime? createdAt,
+    this.isApplied = false,
+    this.slotNumber,
+    this.description = '',
+    List<String>? collectionIds,
   })  : tags = tags ?? [],
+        collectionIds = collectionIds ?? (collectionId != null ? [collectionId!] : []),
         createdAt = createdAt ?? DateTime.now();
 
   static Map<String, String> detectRaceGender(String filePath) {
@@ -64,4 +81,8 @@ class Character extends HiveObject {
     return ['fhp', 'mhp', 'fnp', 'mnp', 'fdp', 'mdp', 'fcp', 'mcp']
         .contains(ext);
   }
+
+  static const List<String> validExtensions = [
+    'fhp', 'mhp', 'fnp', 'mnp', 'fdp', 'mdp', 'fcp', 'mcp'
+  ];
 }

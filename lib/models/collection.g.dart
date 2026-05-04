@@ -1,10 +1,7 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
+// Manually maintained to support null-safe migration of new fields
 
 part of 'collection.dart';
-
-// **************************************************************************
-// TypeAdapterGenerator
-// **************************************************************************
 
 class CollectionAdapter extends TypeAdapter<Collection> {
   @override
@@ -20,19 +17,22 @@ class CollectionAdapter extends TypeAdapter<Collection> {
       id: fields[0] as String,
       name: fields[1] as String,
       createdAt: fields[2] as DateTime?,
+      thumbnailPath: fields[3] == null ? null : fields[3] as String?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Collection obj) {
     writer
-      ..writeByte(3)
+      ..writeByte(4)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
       ..write(obj.name)
       ..writeByte(2)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(3)
+      ..write(obj.thumbnailPath);
   }
 
   @override

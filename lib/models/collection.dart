@@ -13,9 +13,13 @@ class Collection extends HiveObject {
   @HiveField(2)
   late DateTime createdAt;
 
+  @HiveField(3)
+  String? thumbnailPath; // optional custom thumbnail for the collection
+
   Collection({
     required this.id,
     required this.name,
     DateTime? createdAt,
+    this.thumbnailPath,
   }) : createdAt = createdAt ?? DateTime.now();
 }

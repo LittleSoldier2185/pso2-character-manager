@@ -1,34 +1,35 @@
 import 'dart:io';
 import 'package:path/path.dart' as p;
-import 'package:path_provider/path_provider.dart';
+import 'storage_service.dart';
 
 class FileService {
-  static Future<String> get _appDataDir async {
-    final dir = await getApplicationDocumentsDirectory();
-    final appDir = Directory(p.join(dir.path, 'PSO2CharacterManager'));
-    await Directory(p.join(appDir.path, 'characters')).create(recursive: true);
-    await Directory(p.join(appDir.path, 'thumbnails')).create(recursive: true);
-    return appDir.path;
-  }
-
+  /// Copies a character file (.fhp/.mhp etc.) into the managed characters folder.
   static Future<String> copyCharacterFile(String sourcePath) async {
-    final appDir = await _appDataDir;
+    final charsDir = await StorageService.charactersDir;
     final fileName = p.basename(sourcePath);
-    final destPath = p.join(appDir, 'characters', fileName);
-    final dest = await _uniquePath(destPath);
+    final destPath = p.join(charsDir, fileName);
+    final dest = await StorageService.uniquePath(destPath);
     await File(sourcePath).copy(dest);
     return dest;
   }
 
+  /// Copies an image file into the managed thumbnails folder.
   static Future<String> copyThumbnailFile(String sourcePath) async {
-    final appDir = await _appDataDir;
+    final thumbsDir = await StorageService.thumbnailsDir;
     final ext = p.extension(sourcePath);
     final fileName = '${DateTime.now().millisecondsSinceEpoch}$ext';
-    final destPath = p.join(appDir, 'thumbnails', fileName);
+    final destPath = p.join(thumbsDir, fileName);
     await File(sourcePath).copy(destPath);
     return destPath;
   }
 
+  /// Exports (copies) a character file to a user-chosen destination.
+  static Future<void> exportCharacterFile(
+      String sourcePath, String destPath) async {
+    await File(sourcePath).copy(destPath);
+  }
+
+  /// Safely deletes a file if it exists.
   static Future<void> deleteFile(String filePath) async {
     try {
       final file = File(filePath);
@@ -36,12 +37,29 @@ class FileService {
     } catch (_) {}
   }
 
-  static Future<String> _uniquePath(String path) async {
-    if (!await File(path).exists()) return path;
-    final dir = p.dirname(path);
-    final name = p.basenameWithoutExtension(path);
-    final ext = p.extension(path);
-    final stamp = DateTime.now().millisecondsSinceEpoch;
-    return p.join(dir, '${name}_$stamp$ext');
+  /// Scans a folder for PSO2 character files not already in the known set.
+  /// Returns list of file paths that are unregistered.
+  static Future<List<String>> scanForUnregisteredFiles(
+    String folderPath,
+    Set<String> registeredFileNames,
+  ) async {
+    final dir = Directory(folderPath);
+    if (!await dir.exists()) return [];
+
+    const validExts = ['fhp', 'mhp', 'fnp', 'mnp', 'fdp', 'mdp', 'fcp', 'mcp'];
+    final unregistered = <String>[];
+
+    await for (final entity in dir.list()) {
+      if (entity is File) {
+        final ext = p.extension(entity.path).replaceFirst('.', '').toLowerCase();
+        if (validExts.contains(ext)) {
+          final fileName = p.basename(entity.path);
+          if (!registeredFileNames.contains(fileName)) {
+            unregistered.add(entity.path);
+          }
+        }
+      }
+    }
+    return unregistered;
   }
 }

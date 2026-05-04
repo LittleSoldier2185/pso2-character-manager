@@ -1,10 +1,7 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
+// Manually maintained to support null-safe migration of new fields
 
 part of 'character.dart';
-
-// **************************************************************************
-// TypeAdapterGenerator
-// **************************************************************************
 
 class CharacterAdapter extends TypeAdapter<Character> {
   @override
@@ -16,6 +13,16 @@ class CharacterAdapter extends TypeAdapter<Character> {
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
+    // Migrate legacy single collectionId → collectionIds list
+    final legacyColId = fields[7] as String?;
+    List<String> collectionIds;
+    if (fields[12] != null) {
+      collectionIds = (fields[12] as List).cast<String>();
+    } else if (legacyColId != null) {
+      collectionIds = [legacyColId];
+    } else {
+      collectionIds = [];
+    }
     return Character(
       id: fields[0] as String,
       name: fields[1] as String,
@@ -26,13 +33,17 @@ class CharacterAdapter extends TypeAdapter<Character> {
       tags: (fields[6] as List?)?.cast<String>(),
       collectionId: fields[7] as String?,
       createdAt: fields[8] as DateTime?,
+      isApplied: fields[9] == null ? false : fields[9] as bool,
+      slotNumber: fields[10] as int?,
+      description: fields[11] == null ? '' : fields[11] as String,
+      collectionIds: collectionIds,
     );
   }
 
   @override
   void write(BinaryWriter writer, Character obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(13)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -50,7 +61,15 @@ class CharacterAdapter extends TypeAdapter<Character> {
       ..writeByte(7)
       ..write(obj.collectionId)
       ..writeByte(8)
-      ..write(obj.createdAt);
+      ..write(obj.createdAt)
+      ..writeByte(9)
+      ..write(obj.isApplied)
+      ..writeByte(10)
+      ..write(obj.slotNumber)
+      ..writeByte(11)
+      ..write(obj.description)
+      ..writeByte(12)
+      ..write(obj.collectionIds);
   }
 
   @override
