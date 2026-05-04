@@ -1,4 +1,4 @@
-# PSO2 Character Data Manager
+# PSO2 Character Manager
 
 > ⚠️ **This is a prototype version.** The app is functional but still in early development. Features may change, and bugs may be present. Feedback and contributions are welcome!
 
