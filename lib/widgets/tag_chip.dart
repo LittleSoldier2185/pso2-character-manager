@@ -15,8 +15,8 @@ class TagChip extends StatelessWidget {
           onDeleted != null ? const Icon(Icons.close, size: 14) : null,
       onDeleted: onDeleted,
       backgroundColor: AppTheme.bgSurface,
-      side: const BorderSide(color: AppTheme.accent, width: 0.5),
-      labelStyle: const TextStyle(color: AppTheme.accent, fontSize: 11),
+      side: BorderSide(color: AppTheme.accent, width: 0.5),
+      labelStyle: TextStyle(color: AppTheme.accent, fontSize: 11),
       padding: const EdgeInsets.symmetric(horizontal: 4),
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
     );
