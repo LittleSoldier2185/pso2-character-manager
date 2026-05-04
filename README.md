@@ -1,6 +1,6 @@
 # PSO2 Character Manager
 
-> ⚠️ **This is a prototype version.** The app is functional but still in early development. Features may change, and bugs may be present. Feedback and contributions are welcome!
+> ⚠️ **This is a first version.** The app is functional but still in early development. Features may change, and bugs may be present. Feedback and contributions are welcome!
 
 A Windows desktop app built with Flutter for managing Phantasy Star Online 2 character data files locally.
 
