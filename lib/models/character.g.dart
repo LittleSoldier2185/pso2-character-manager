@@ -37,13 +37,17 @@ class CharacterAdapter extends TypeAdapter<Character> {
       slotNumber: fields[10] as int?,
       description: fields[11] == null ? '' : fields[11] as String,
       collectionIds: collectionIds,
+      // New fields — null-safe defaults for existing records
+      originalFileName: fields[13] == null ? null : fields[13] as String?,
+      lastSyncedAt: fields[14] == null ? null : fields[14] as DateTime?,
+      isFavourite: fields[15] == null ? false : fields[15] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, Character obj) {
     writer
-      ..writeByte(13)
+      ..writeByte(16)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -69,7 +73,13 @@ class CharacterAdapter extends TypeAdapter<Character> {
       ..writeByte(11)
       ..write(obj.description)
       ..writeByte(12)
-      ..write(obj.collectionIds);
+      ..write(obj.collectionIds)
+      ..writeByte(13)
+      ..write(obj.originalFileName)
+      ..writeByte(14)
+      ..write(obj.lastSyncedAt)
+      ..writeByte(15)
+      ..write(obj.isFavourite);
   }
 
   @override

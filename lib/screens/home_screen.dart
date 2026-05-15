@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../providers/character_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/character_card.dart';
+import '../widgets/character_spinner.dart';
 import 'character_detail_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -108,6 +109,29 @@ class _TopBarState extends State<_TopBar> {
   OverlayEntry? _suggestionOverlay;
   final _layerLink = LayerLink();
   String _typedValue = '';
+  bool _spinnerLoading = false;
+
+  Future<void> _openSpinner(CharacterProvider provider) async {
+    final characters = provider.hasActiveFilters
+        ? provider.filteredCharacters
+        : provider.allCharacters;
+    if (characters.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No characters to pick from!')),
+      );
+      return;
+    }
+    setState(() => _spinnerLoading = true);
+    final winner = await showCharacterSpinner(context, characters);
+    if (mounted) setState(() => _spinnerLoading = false);
+    if (winner != null && mounted) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => CharacterDetailScreen(character: winner)),
+      );
+    }
+  }
 
   @override
   void dispose() {
@@ -146,8 +170,8 @@ class _TopBarState extends State<_TopBar> {
     final q = query.toLowerCase();
     final tagMatches = provider.allTags
         .where((t) =>
-            t.toLowerCase().contains(q) &&
-            !provider.pendingTokens.contains(t))
+            t.name.toLowerCase().contains(q) &&
+            !provider.pendingTokens.contains(t.name))
         .take(4)
         .toList();
     final nameMatches = provider.allCharacters
@@ -188,8 +212,8 @@ class _TopBarState extends State<_TopBar> {
                   if (tagMatches.isNotEmpty) ...[
                     _suggestionHeader('Tags'),
                     ...tagMatches.map((t) => _suggestionItem(
-                          t, 'tag', AppTheme.newmanColor,
-                          () => _addToken(t, provider))),
+                          t.name, 'tag', t.color,
+                          () => _addToken(t.name, provider))),
                   ],
                 ],
               ),
@@ -425,6 +449,32 @@ class _TopBarState extends State<_TopBar> {
 
                   // ── Sort button ───────────────────────────────
                   _SortButton(provider: provider),
+                  const SizedBox(width: 6),
+
+                  // ── Random pick button ────────────────────────
+                  GestureDetector(
+                    onTap: _spinnerLoading
+                        ? null
+                        : () => _openSpinner(provider),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgSurface,
+                        borderRadius: BorderRadius.circular(7),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: _spinnerLoading
+                          ? SizedBox(
+                              width: 14,
+                              height: 14,
+                              child: CircularProgressIndicator(
+                                  strokeWidth: 1.5,
+                                  color: AppTheme.accent))
+                          : Icon(Icons.casino_outlined,
+                              size: 14,
+                              color: AppTheme.textSecondary),
+                    ),
+                  ),
                 ],
               ),
 
@@ -528,7 +578,7 @@ class _SortButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return PopupMenuButton<SortOption>(
+    return PopupMenuButton<String>(
       color: AppTheme.bgCard,
       tooltip: 'Sort',
       icon: Icon(
@@ -540,34 +590,65 @@ class _SortButton extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         side: const BorderSide(color: AppTheme.borderColor),
       ),
-      onSelected: provider.setSortOption,
-      itemBuilder: (_) => SortOption.values
-          .map((opt) => PopupMenuItem(
-                value: opt,
-                child: Row(
-                  children: [
-                    Icon(opt.icon,
-                        size: 14,
-                        color: provider.sortOption == opt
-                            ? AppTheme.accent
-                            : AppTheme.textSecondary),
-                    const SizedBox(width: 8),
-                    Text(opt.label,
-                        style: TextStyle(
-                            color: provider.sortOption == opt
-                                ? AppTheme.accent
-                                : AppTheme.textPrimary,
-                            fontSize: 13)),
-                    if (provider.sortOption == opt) ...[
-                      const Spacer(),
-                      // No const — accent is dynamic
-                      Icon(Icons.check_rounded,
-                          size: 13, color: AppTheme.accent),
-                    ],
+      onSelected: (value) {
+        if (value == '__favourites_top__') {
+          provider.setFavouritesOnTop(!provider.favouritesOnTop);
+        } else {
+          final opt = SortOption.values.firstWhere((o) => o.name == value);
+          provider.setSortOption(opt);
+        }
+      },
+      itemBuilder: (_) => [
+        // Favourites on top toggle — always at the top of the menu
+        PopupMenuItem<String>(
+          value: '__favourites_top__',
+          child: Row(
+            children: [
+              Icon(
+                provider.favouritesOnTop
+                    ? Icons.check_box_rounded
+                    : Icons.check_box_outline_blank_rounded,
+                size: 14,
+                color: provider.favouritesOnTop
+                    ? Colors.pinkAccent
+                    : AppTheme.textSecondary,
+              ),
+              const SizedBox(width: 8),
+              Text('Favourites on top',
+                  style: TextStyle(
+                      color: provider.favouritesOnTop
+                          ? Colors.pinkAccent
+                          : AppTheme.textPrimary,
+                      fontSize: 13)),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        ...SortOption.values.map((opt) => PopupMenuItem<String>(
+              value: opt.name,
+              child: Row(
+                children: [
+                  Icon(opt.icon,
+                      size: 14,
+                      color: provider.sortOption == opt
+                          ? AppTheme.accent
+                          : AppTheme.textSecondary),
+                  const SizedBox(width: 8),
+                  Text(opt.label,
+                      style: TextStyle(
+                          color: provider.sortOption == opt
+                              ? AppTheme.accent
+                              : AppTheme.textPrimary,
+                          fontSize: 13)),
+                  if (provider.sortOption == opt) ...[
+                    const Spacer(),
+                    Icon(Icons.check_rounded,
+                        size: 13, color: AppTheme.accent),
                   ],
-                ),
-              ))
-          .toList(),
+                ],
+              ),
+            )),
+      ],
     );
   }
 }
@@ -694,6 +775,7 @@ class _FilterPanel extends StatelessWidget {
                                   ))
                               .toList()),
                     ],
+
                   ],
                 ),
               ),

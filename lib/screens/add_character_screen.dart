@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 import '../models/character.dart';
 import '../providers/character_provider.dart';
@@ -9,9 +10,7 @@ import '../theme/app_theme.dart';
 import '../widgets/tag_chip.dart';
 
 class AddCharacterScreen extends StatefulWidget {
-  /// Pre-fill a file path when opening from the scan result screen.
   final String? prefilledFilePath;
-
   const AddCharacterScreen({super.key, this.prefilledFilePath});
 
   @override
@@ -33,6 +32,13 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
   bool _isSaving = false;
   bool _isDraggingFile = false;
   bool _isDraggingImage = false;
+
+  // Conflict resolution state
+  // null = no conflict, non-null = user chose custom storage name
+  String? _customStorageName;
+  // true = replace existing, false/null = save with new name
+  bool _replaceExisting = false;
+  String? _conflictingCharName;
 
   @override
   void initState() {
@@ -57,6 +63,10 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
       _selectedCharFilePath = path;
       _detectedRace = raceGender['race'];
       _detectedGender = raceGender['gender'];
+      // Reset conflict state when a new file is selected
+      _customStorageName = null;
+      _replaceExisting = false;
+      _conflictingCharName = null;
     });
   }
 
@@ -67,8 +77,195 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
       dialogTitle: 'Add Character File',
     );
     if (result != null && result.files.single.path != null) {
-      _setCharFile(result.files.single.path!);
+      final path = result.files.single.path!;
+      _setCharFile(path);
+      // Check for conflict after picking
+      await _checkConflict(path);
     }
+  }
+
+  Future<void> _checkConflict(String filePath) async {
+    final provider = context.read<CharacterProvider>();
+    String? conflictName;
+    try {
+      conflictName = await provider.checkFileConflict(filePath);
+    } catch (_) {
+      conflictName = null;
+    }
+    if (conflictName != null && mounted) {
+      setState(() => _conflictingCharName = conflictName);
+      await _showConflictDialog(filePath, conflictName);
+    }
+  }
+
+  Future<void> _showConflictDialog(
+      String filePath, String conflictingCharName) async {
+    final ext = p.extension(filePath); // e.g. ".fhp"
+    final originalName = p.basenameWithoutExtension(filePath); // e.g. "3001"
+    final renameController =
+        TextEditingController(text: '${originalName}_copy');
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          final previewName = '${renameController.text.trim()}$ext';
+          final isRenameEmpty = renameController.text.trim().isEmpty;
+          return AlertDialog(
+            backgroundColor: AppTheme.bgCard,
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentGold.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(Icons.warning_amber_rounded,
+                      color: AppTheme.accentGold, size: 16),
+                ),
+                const SizedBox(width: 10),
+                const Text('Filename already exists'),
+              ],
+            ),
+            content: SizedBox(
+              width: 400,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Conflict info box
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppTheme.bgSurface,
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppTheme.borderColor),
+                    ),
+                    child: RichText(
+                      text: TextSpan(
+                        style: const TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 13),
+                        children: [
+                          TextSpan(
+                            text: p.basename(filePath),
+                            style: const TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontWeight: FontWeight.w500),
+                          ),
+                          const TextSpan(text: ' is already registered as '),
+                          TextSpan(
+                            text: '"$conflictingCharName"',
+                            style: const TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontWeight: FontWeight.w500),
+                          ),
+                          const TextSpan(
+                              text:
+                                  ' in your library. Saving with the same name would overwrite it.'),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Rename this file to save as a new entry:',
+                    style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8),
+                  // Rename input + extension label
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: renameController,
+                          onChanged: (_) => setSt(() {}),
+                          decoration: InputDecoration(
+                            hintText: '${originalName}_copy',
+                            errorText: isRenameEmpty ? 'Name required' : null,
+                          ),
+                          style: const TextStyle(
+                              color: AppTheme.textPrimary, fontSize: 13),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: AppTheme.bgSurface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppTheme.borderColor),
+                        ),
+                        child: Text(ext,
+                            style: const TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 13)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Will be saved as: $previewName',
+                    style: TextStyle(
+                        color: AppTheme.accent.withOpacity(0.8),
+                        fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              // Cancel
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _selectedCharFilePath = null;
+                    _detectedRace = null;
+                    _detectedGender = null;
+                    _conflictingCharName = null;
+                    _customStorageName = null;
+                    _replaceExisting = false;
+                  });
+                },
+                child: const Text('Cancel'),
+              ),
+              // Replace existing
+              OutlinedButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  setState(() {
+                    _replaceExisting = true;
+                    _customStorageName = null;
+                  });
+                },
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
+                ),
+                child: const Text('Replace existing'),
+              ),
+              // Save with new name
+              ElevatedButton(
+                onPressed: isRenameEmpty
+                    ? null
+                    : () {
+                        Navigator.pop(ctx);
+                        setState(() {
+                          _customStorageName = renameController.text.trim();
+                          _replaceExisting = false;
+                        });
+                      },
+                child: const Text('Save with new name'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
   }
 
   Future<void> _pickImage() async {
@@ -84,7 +281,10 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
   void _addTag() {
     final tag = _tagController.text.trim();
     if (tag.isNotEmpty && !_tags.contains(tag)) {
-      setState(() { _tags.add(tag); _tagController.clear(); });
+      setState(() {
+        _tags.add(tag);
+        _tagController.clear();
+      });
     }
   }
 
@@ -92,26 +292,52 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
     if (!_formKey.currentState!.validate()) return;
     if (_selectedCharFilePath == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please add a character file first'),
+        const SnackBar(
+            content: Text('Please add a character file first'),
             backgroundColor: Colors.red),
       );
       return;
     }
     setState(() => _isSaving = true);
     try {
-      await context.read<CharacterProvider>().addCharacter(
-            name: _nameController.text.trim(),
-            sourceFilePath: _selectedCharFilePath!,
-            sourceThumbnailPath: _selectedImagePath,
-            tags: _tags,
-            collectionIds: _selectedCollectionIds,
-            description: _descController.text.trim(),
-          );
+      final provider = context.read<CharacterProvider>();
+
+      if (_replaceExisting && _conflictingCharName != null) {
+        // Find the existing character and replace its file
+        final existing = provider.allCharacters.firstWhere(
+          (c) => c.name == _conflictingCharName,
+          orElse: () => throw StateError('not found'),
+        );
+        await provider.replaceCharacterFile(existing, _selectedCharFilePath!);
+        // Still add as new entry since user might want both
+        await provider.addCharacter(
+          name: _nameController.text.trim(),
+          sourceFilePath: _selectedCharFilePath!,
+          sourceThumbnailPath: _selectedImagePath,
+          tags: _tags,
+          collectionIds: _selectedCollectionIds,
+          description: _descController.text.trim(),
+        );
+      } else {
+        await provider.addCharacter(
+          name: _nameController.text.trim(),
+          sourceFilePath: _selectedCharFilePath!,
+          sourceThumbnailPath: _selectedImagePath,
+          tags: _tags,
+          collectionIds: _selectedCollectionIds,
+          description: _descController.text.trim(),
+          customStorageName: _customStorageName,
+        );
+      }
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error saving: $e'), backgroundColor: Colors.red),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+              content: Text('Error saving: $e'),
+              backgroundColor: Colors.red),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -120,6 +346,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
   @override
   Widget build(BuildContext context) {
     final collections = context.watch<CharacterProvider>().allCollections;
+
     return Scaffold(
       appBar: AppBar(title: const Text('Add character')),
       body: SingleChildScrollView(
@@ -129,22 +356,26 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Left: thumbnail + char file ────────────────────
+              // ── Left: thumbnail + char file ──────────────────
               SizedBox(
                 width: 210,
                 child: Column(
                   children: [
-                    // Thumbnail drop zone
                     DropTarget(
-                      onDragEntered: (_) => setState(() => _isDraggingImage = true),
-                      onDragExited: (_) => setState(() => _isDraggingImage = false),
+                      onDragEntered: (_) =>
+                          setState(() => _isDraggingImage = true),
+                      onDragExited: (_) =>
+                          setState(() => _isDraggingImage = false),
                       onDragDone: (details) {
                         setState(() => _isDraggingImage = false);
                         final dropped = details.files.firstOrNull;
                         if (dropped != null) {
-                          final ext = dropped.path.split('.').last.toLowerCase();
-                          if (['jpg','jpeg','png','gif','webp','bmp'].contains(ext)) {
-                            setState(() => _selectedImagePath = dropped.path);
+                          final ext =
+                              dropped.path.split('.').last.toLowerCase();
+                          if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp']
+                              .contains(ext)) {
+                            setState(
+                                () => _selectedImagePath = dropped.path);
                           }
                         }
                       },
@@ -170,14 +401,17 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                               ? ClipRRect(
                                   borderRadius: BorderRadius.circular(11),
                                   child: Image.file(
-                                      File(_selectedImagePath!), fit: BoxFit.cover),
+                                      File(_selectedImagePath!),
+                                      fit: BoxFit.cover),
                                 )
                               : Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Icon(Icons.add_photo_alternate_outlined,
+                                    Icon(
+                                        Icons.add_photo_alternate_outlined,
                                         size: 36,
-                                        color: AppTheme.textSecondary.withOpacity(0.5)),
+                                        color: AppTheme.textSecondary
+                                            .withOpacity(0.5)),
                                     const SizedBox(height: 8),
                                     const Text('Drop image here',
                                         style: TextStyle(
@@ -203,21 +437,27 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                             : 'Change thumbnail'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppTheme.textSecondary,
-                          side: const BorderSide(color: AppTheme.borderColor),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          side: const BorderSide(
+                              color: AppTheme.borderColor),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 8),
                           textStyle: const TextStyle(fontSize: 12),
                         ),
                       ),
                     ),
                     const SizedBox(height: 20),
-                    // Character file drop zone
                     DropTarget(
-                      onDragEntered: (_) => setState(() => _isDraggingFile = true),
-                      onDragExited: (_) => setState(() => _isDraggingFile = false),
-                      onDragDone: (details) {
+                      onDragEntered: (_) =>
+                          setState(() => _isDraggingFile = true),
+                      onDragExited: (_) =>
+                          setState(() => _isDraggingFile = false),
+                      onDragDone: (details) async {
                         setState(() => _isDraggingFile = false);
                         final dropped = details.files.firstOrNull;
-                        if (dropped != null) _setCharFile(dropped.path);
+                        if (dropped != null) {
+                          _setCharFile(dropped.path);
+                          await _checkConflict(dropped.path);
+                        }
                       },
                       child: GestureDetector(
                         onTap: _pickCharacterFile,
@@ -248,12 +488,15 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                                 size: 28,
                                 color: _selectedCharFilePath != null
                                     ? AppTheme.accent
-                                    : AppTheme.textSecondary.withOpacity(0.5),
+                                    : AppTheme.textSecondary
+                                        .withOpacity(0.5),
                               ),
                               const SizedBox(height: 6),
                               Text(
                                 _selectedCharFilePath != null
-                                    ? _selectedCharFilePath!.split(r'\').last
+                                    ? _selectedCharFilePath!
+                                        .split(r'\')
+                                        .last
                                     : 'Drop .fhp .mhp .fnp…\nor click to browse',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
@@ -281,13 +524,26 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                             : 'Change file'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppTheme.textSecondary,
-                          side: const BorderSide(color: AppTheme.borderColor),
-                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          side: const BorderSide(
+                              color: AppTheme.borderColor),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 8),
                           textStyle: const TextStyle(fontSize: 12),
                         ),
                       ),
                     ),
-                    // Race / Gender badge
+                    // Conflict resolution status
+                    if (_conflictingCharName != null) ...[
+                      const SizedBox(height: 10),
+                      _ConflictStatusBadge(
+                        conflictingName: _conflictingCharName!,
+                        customName: _customStorageName,
+                        replaceExisting: _replaceExisting,
+                        originalExt: _selectedCharFilePath != null
+                            ? p.extension(_selectedCharFilePath!)
+                            : '',
+                      ),
+                    ],
                     if (_detectedRace != null) ...[
                       const SizedBox(height: 12),
                       Row(
@@ -304,7 +560,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                 ),
               ),
               const SizedBox(width: 28),
-              // ── Right: form fields ─────────────────────────────
+              // ── Right: form fields ───────────────────────────
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -315,9 +571,10 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                       controller: _nameController,
                       decoration: const InputDecoration(
                           hintText: 'Enter a name for this character'),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Name is required'
-                          : null,
+                      validator: (v) =>
+                          (v == null || v.trim().isEmpty)
+                              ? 'Name is required'
+                              : null,
                     ),
                     const SizedBox(height: 18),
                     _label('Description (optional)'),
@@ -326,7 +583,8 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                       controller: _descController,
                       maxLines: 3,
                       decoration: const InputDecoration(
-                          hintText: 'Notes about this character, style, build…'),
+                          hintText:
+                              'Notes about this character, style, build…'),
                     ),
                     const SizedBox(height: 18),
                     _label('Collections (optional)'),
@@ -381,7 +639,8 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                             ? const SizedBox(
                                 width: 20,
                                 height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2))
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2))
                             : const Text('Save character',
                                 style: TextStyle(fontSize: 15)),
                       ),
@@ -398,8 +657,9 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
 
   Widget _buildCollectionPicker(List collections) {
     if (collections.isEmpty) {
-      return Text('No collections yet — create one in the Collections tab.',
-          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12));
+      return const Text(
+          'No collections yet — create one in the Collections tab.',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 12));
     }
     return Wrap(
       spacing: 6,
@@ -416,21 +676,26 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
           }),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            padding:
+                const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
               color: selected
                   ? AppTheme.accent.withOpacity(0.12)
                   : AppTheme.bgSurface,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                  color: selected ? AppTheme.accent : AppTheme.borderColor),
+                  color: selected
+                      ? AppTheme.accent
+                      : AppTheme.borderColor),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(Icons.folder_rounded,
                     size: 12,
-                    color: selected ? AppTheme.accent : AppTheme.textSecondary),
+                    color: selected
+                        ? AppTheme.accent
+                        : AppTheme.textSecondary),
                 const SizedBox(width: 5),
                 Text(col.name,
                     style: TextStyle(
@@ -457,7 +722,8 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
           fontWeight: FontWeight.w500));
 
   Widget _badge(String text, Color color) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
         decoration: BoxDecoration(
           color: color.withOpacity(0.1),
           borderRadius: BorderRadius.circular(6),
@@ -465,4 +731,71 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
         ),
         child: Text(text, style: TextStyle(color: color, fontSize: 11)),
       );
+}
+
+/// Shows the current conflict resolution status below the file picker
+class _ConflictStatusBadge extends StatelessWidget {
+  final String conflictingName;
+  final String? customName;
+  final bool replaceExisting;
+  final String originalExt;
+
+  const _ConflictStatusBadge({
+    required this.conflictingName,
+    required this.customName,
+    required this.replaceExisting,
+    required this.originalExt,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (replaceExisting) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: Colors.red.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: Colors.red.withOpacity(0.4)),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.swap_horiz_rounded,
+                size: 13, color: Colors.red),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Will replace "$conflictingName"\'s file',
+                style: const TextStyle(color: Colors.red, fontSize: 11),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    if (customName != null) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: AppTheme.accent.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(7),
+          border: Border.all(color: AppTheme.accent.withOpacity(0.4)),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.drive_file_rename_outline_rounded,
+                size: 13, color: AppTheme.accent),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                'Saved as: $customName$originalExt',
+                style:
+                    TextStyle(color: AppTheme.accent, fontSize: 11),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return const SizedBox.shrink();
+  }
 }
