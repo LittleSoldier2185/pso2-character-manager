@@ -1,44 +1,38 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 // Manually maintained to support null-safe migration of new fields
 
-part of 'collection.dart';
+part of 'tag.dart';
 
-class CollectionAdapter extends TypeAdapter<Collection> {
+class TagAdapter extends TypeAdapter<Tag> {
   @override
-  final int typeId = 1;
+  final int typeId = 3;
 
   @override
-  Collection read(BinaryReader reader) {
+  Tag read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return Collection(
+    return Tag(
       id: fields[0] as String,
       name: fields[1] as String,
-      createdAt: fields[2] as DateTime?,
-      thumbnailPath: fields[3] == null ? null : fields[3] as String?,
-      description: fields[4] == null ? '' : fields[4] as String,
-      accentColorValue: fields[5] == null ? null : fields[5] as int?,
+      colorValue: fields[2] == null ? const Color(0xFF00B4D8).toARGB32() : fields[2] as int,
+      createdAt: fields[3] == null ? DateTime.now() : fields[3] as DateTime,
     );
   }
 
   @override
-  void write(BinaryWriter writer, Collection obj) {
+  void write(BinaryWriter writer, Tag obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(4)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
       ..write(obj.name)
       ..writeByte(2)
-      ..write(obj.createdAt)
+      ..write(obj.colorValue)
       ..writeByte(3)
-      ..write(obj.thumbnailPath)
-      ..writeByte(4)
-      ..write(obj.description)
-      ..writeByte(5)
-      ..write(obj.accentColorValue);
+      ..write(obj.createdAt);
   }
 
   @override
@@ -47,7 +41,7 @@ class CollectionAdapter extends TypeAdapter<Collection> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is CollectionAdapter &&
+      other is TagAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

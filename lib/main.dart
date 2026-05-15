@@ -6,8 +6,13 @@ import 'screens/collections_screen.dart';
 import 'screens/applied_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/add_character_screen.dart';
+import 'screens/character_detail_screen.dart';
+import 'screens/gallery_screen.dart';
+import 'screens/scan_screen.dart';
+import 'screens/tags_screen.dart';
 import 'services/hive_service.dart';
 import 'theme/app_theme.dart';
+import 'widgets/character_spinner.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -75,6 +80,9 @@ class _MainShellState extends State<MainShell> {
     HomeScreen(),
     CollectionsScreen(),
     AppliedScreen(),
+    GalleryScreen(),
+    TagsScreen(),
+    ScanScreen(),
   ];
 
   @override
@@ -94,11 +102,38 @@ class _MainShellState extends State<MainShell> {
   }
 }
 
-class _Sidebar extends StatelessWidget {
+class _Sidebar extends StatefulWidget {
   final int currentIndex;
   final ValueChanged<int> onSelect;
 
   const _Sidebar({required this.currentIndex, required this.onSelect});
+
+  @override
+  State<_Sidebar> createState() => _SidebarState();
+}
+
+class _SidebarState extends State<_Sidebar> {
+  bool _spinnerLoading = false;
+
+  Future<void> _openSpinner(CharacterProvider provider) async {
+    final characters = provider.allCharacters;
+    if (characters.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add some characters first!')),
+      );
+      return;
+    }
+    setState(() => _spinnerLoading = true);
+    final winner = await showCharacterSpinner(context, characters);
+    if (mounted) setState(() => _spinnerLoading = false);
+    if (winner != null && mounted) {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+            builder: (_) => CharacterDetailScreen(character: winner)),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -136,7 +171,7 @@ class _Sidebar extends StatelessWidget {
                                 color: AppTheme.textPrimary,
                                 fontSize: 8,
                                 fontWeight: FontWeight.w500)),
-                        Text('v1.0.0',
+                        Text('v1.1.0',
                             style: TextStyle(
                                 color: AppTheme.textSecondary, fontSize: 10)),
                       ],
@@ -152,52 +187,92 @@ class _Sidebar extends StatelessWidget {
                 icon: Icons.grid_view_rounded,
                 label: 'All characters',
                 badge: '${provider.allCharacters.length}',
-                selected: currentIndex == 0,
-                onTap: () => onSelect(0),
+                selected: widget.currentIndex == 0,
+                onTap: () => widget.onSelect(0),
               ),
               _NavItem(
                 icon: Icons.folder_rounded,
                 label: 'Collections',
                 badge: '${provider.allCollections.length}',
-                selected: currentIndex == 1,
-                onTap: () => onSelect(1),
+                selected: widget.currentIndex == 1,
+                onTap: () => widget.onSelect(1),
               ),
               _NavItem(
                 icon: Icons.check_circle_outline_rounded,
                 label: 'Applied to game',
                 badge: '${provider.appliedCount}',
-                selected: currentIndex == 2,
-                onTap: () => onSelect(2),
+                selected: widget.currentIndex == 2,
+                onTap: () => widget.onSelect(2),
+              ),
+              _NavItem(
+                icon: Icons.photo_library_outlined,
+                label: 'Gallery',
+                badge: provider.getAllGalleryItems().isNotEmpty
+                    ? '${provider.getAllGalleryItems().length}'
+                    : null,
+                selected: widget.currentIndex == 3,
+                onTap: () => widget.onSelect(3),
+              ),
+              _NavItem(
+                icon: Icons.label_rounded,
+                label: 'Tags',
+                badge: provider.allTags.isNotEmpty
+                    ? '${provider.allTags.length}'
+                    : null,
+                selected: widget.currentIndex == 4,
+                onTap: () => widget.onSelect(4),
+              ),
+              _NavItem(
+                icon: Icons.radar_rounded,
+                label: 'Scan folder',
+                selected: widget.currentIndex == 5,
+                onTap: () => widget.onSelect(5),
               ),
 
-              // ── Slot bar ──────────────────────────────────────
-              const SizedBox(height: 8),
-              _sectionLabel('Game slots'),
+              const Spacer(),
+
+              // ── Character slots ────────────────────────────────
+              _sectionLabel('Character slots'),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('${provider.appliedCount} / 50',
-                            style: TextStyle(
-                                color: AppTheme.accent,
-                                fontSize: 11,
-                                fontWeight: FontWeight.w500)),
-                        const Text('slots used',
-                            style: TextStyle(
-                                color: AppTheme.textSecondary, fontSize: 10)),
+                        Text(
+                          '${provider.appliedCount} / 50',
+                          style: TextStyle(
+                              color: provider.appliedCount > 50
+                                  ? Colors.red
+                                  : AppTheme.accent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500),
+                        ),
+                        Text(
+                          provider.appliedCount > 50
+                              ? 'over limit!'
+                              : 'slots used',
+                          style: TextStyle(
+                              color: provider.appliedCount > 50
+                                  ? Colors.red.withOpacity(0.8)
+                                  : AppTheme.textSecondary,
+                              fontSize: 10),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 4),
                     ClipRRect(
                       borderRadius: BorderRadius.circular(2),
                       child: LinearProgressIndicator(
-                        value: provider.appliedCount / 50,
+                        value: (provider.appliedCount / 50).clamp(0.0, 1.0),
                         backgroundColor: AppTheme.bgSurface,
-                        valueColor: AlwaysStoppedAnimation(AppTheme.accent),
+                        valueColor: AlwaysStoppedAnimation(
+                          provider.appliedCount > 50
+                              ? Colors.red
+                              : AppTheme.accent,
+                        ),
                         minHeight: 4,
                       ),
                     ),
@@ -205,8 +280,7 @@ class _Sidebar extends StatelessWidget {
                 ),
               ),
 
-              const Spacer(),
-
+              // ── App section ──────────────────────────────────────
               _sectionLabel('App'),
               _NavItem(
                 icon: Icons.settings_outlined,

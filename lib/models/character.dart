@@ -26,7 +26,7 @@ class Character extends HiveObject {
   List<String> tags;
 
   @HiveField(7)
-  String? collectionId; // kept for legacy migration, use collectionIds
+  String? collectionId;
 
   @HiveField(8)
   late DateTime createdAt;
@@ -41,7 +41,23 @@ class Character extends HiveObject {
   String description;
 
   @HiveField(12)
-  List<String> collectionIds; // multi-collection support
+  List<String> collectionIds;
+
+  /// The original PSO2 filename (e.g. "3001.fhp").
+  /// Used when applying to game folder so PSO2 always gets the correct name
+  /// regardless of how the file is stored internally.
+  @HiveField(13)
+  String? originalFileName;
+
+  /// The last time this character's file was synced from the game folder.
+  /// Used to detect if the game folder has a newer version.
+  @HiveField(14)
+  DateTime? lastSyncedAt;
+
+  /// Whether this character is marked as a favourite.
+  /// Favourites are shown at the top of the library grid by default.
+  @HiveField(15)
+  bool isFavourite;
 
   Character({
     required this.id,
@@ -57,9 +73,22 @@ class Character extends HiveObject {
     this.slotNumber,
     this.description = '',
     List<String>? collectionIds,
+    this.originalFileName,
+    this.lastSyncedAt,
+    this.isFavourite = false,
   })  : tags = tags ?? [],
-        collectionIds = collectionIds ?? (collectionId != null ? [collectionId!] : []),
+        collectionIds =
+            collectionIds ?? (collectionId != null ? [collectionId!] : []),
         createdAt = createdAt ?? DateTime.now();
+
+  /// The filename to use when copying to the PSO2 game folder.
+  /// Uses originalFileName if set, otherwise falls back to the stored filename.
+  String get gameFileName {
+    if (originalFileName != null && originalFileName!.isNotEmpty) {
+      return originalFileName!;
+    }
+    return characterFilePath.split(r'\').last.split('/').last;
+  }
 
   static Map<String, String> detectRaceGender(String filePath) {
     final ext = filePath.split('.').last.toLowerCase();

@@ -1,12 +1,17 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
+import 'dart:ui';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/character.dart';
+import '../models/gallery_item.dart';
+import '../models/tag.dart';
 import '../providers/character_provider.dart';
-import '../services/file_service.dart';
+import '../services/hive_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/tag_chip.dart';
+import 'tags_screen.dart';
 
 class CharacterDetailScreen extends StatefulWidget {
   final Character character;
@@ -22,9 +27,9 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
   late List<String> _tags;
   late List<String> _collectionIds;
   String? _newThumbnailPath;
+  bool _removeThumbnail = false;
   bool _isEditing = false;
   bool _isSaving = false;
-  final _tagController = TextEditingController();
 
   @override
   void initState() {
@@ -39,7 +44,6 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
   void dispose() {
     _nameController.dispose();
     _descController.dispose();
-    _tagController.dispose();
     super.dispose();
   }
 
@@ -53,13 +57,15 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
 
   Future<void> _saveChanges() async {
     setState(() => _isSaving = true);
+    final provider = context.read<CharacterProvider>();
     try {
       if (_newThumbnailPath != null) {
-        if (widget.character.thumbnailPath != null) {
-          await FileService.deleteFile(widget.character.thumbnailPath!);
-        }
-        widget.character.thumbnailPath =
-            await FileService.copyThumbnailFile(_newThumbnailPath!);
+        // Replace thumbnail — deletes old file safely
+        await provider.updateCharacterThumbnail(
+            widget.character, _newThumbnailPath!);
+      } else if (_removeThumbnail) {
+        // Remove thumbnail — deletes file from disk
+        await provider.removeCharacterThumbnail(widget.character);
       }
       widget.character.name = _nameController.text.trim();
       widget.character.description = _descController.text.trim();
@@ -67,7 +73,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
       widget.character.collectionIds = _collectionIds;
       widget.character.collectionId =
           _collectionIds.isNotEmpty ? _collectionIds.first : null;
-      await context.read<CharacterProvider>().updateCharacter(widget.character);
+      await provider.updateCharacter(widget.character);
       if (mounted) setState(() { _isEditing = false; _isSaving = false; });
     } catch (e) {
       if (mounted) {
@@ -86,6 +92,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
       _tags = List.from(widget.character.tags);
       _collectionIds = List.from(widget.character.collectionIds);
       _newThumbnailPath = null;
+      _removeThumbnail = false;
     });
   }
 
@@ -180,7 +187,10 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
   Widget build(BuildContext context) {
     final collections = context.watch<CharacterProvider>().allCollections;
     final c = widget.character;
-    final String? thumbPath = _newThumbnailPath ?? c.thumbnailPath;
+    // If user flagged removal, treat as no thumb; new pick overrides removal
+    final String? thumbPath = _removeThumbnail
+        ? _newThumbnailPath
+        : (_newThumbnailPath ?? c.thumbnailPath);
     final bool hasThumb = thumbPath != null && File(thumbPath).existsSync();
 
     return Scaffold(
@@ -294,6 +304,30 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                       ),
                     ),
                   ),
+                  // Show remove button only if there is a thumbnail to remove
+                  if (hasThumb) ...[
+                    const SizedBox(height: 6),
+                    SizedBox(
+                      width: 240,
+                      child: OutlinedButton.icon(
+                        onPressed: () => setState(() {
+                          _removeThumbnail = true;
+                          _newThumbnailPath = null;
+                        }),
+                        icon: const Icon(Icons.delete_outline,
+                            size: 14, color: Colors.redAccent),
+                        label: const Text('Remove thumbnail',
+                            style: TextStyle(
+                                fontSize: 12, color: Colors.redAccent)),
+                        style: OutlinedButton.styleFrom(
+                          side: const BorderSide(
+                              color: Colors.redAccent, width: 0.5),
+                          padding:
+                              const EdgeInsets.symmetric(vertical: 7),
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
                 const SizedBox(height: 12),
                 Row(
@@ -358,47 +392,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
 
                   _fieldLabel('Tags'),
                   const SizedBox(height: 6),
-                  if (_isEditing) ...[
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: _tagController,
-                            decoration: const InputDecoration(
-                                hintText: 'Add a tag'),
-                            onSubmitted: (_) => _addTag(),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: _addTag,
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.bgSurface,
-                              foregroundColor: AppTheme.accent,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 14)),
-                          child: const Text('Add'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                  ],
-                  _tags.isEmpty
-                      ? const Text('No tags',
-                          style: TextStyle(color: AppTheme.textSecondary))
-                      : Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: _tags
-                              .map((tag) => TagChip(
-                                    label: tag,
-                                    onDeleted: _isEditing
-                                        ? () => setState(
-                                            () => _tags.remove(tag))
-                                        : null,
-                                  ))
-                              .toList(),
-                        ),
+                  _buildTagSection(context),
                   const SizedBox(height: 18),
 
                   _fieldLabel('Character file'),
@@ -411,8 +405,12 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                       style: const TextStyle(
                           color: AppTheme.textSecondary, fontSize: 11)),
 
+                  const SizedBox(height: 24),
+                  const Divider(color: AppTheme.borderColor, height: 1),
+                  const SizedBox(height: 16),
+
+                  // ── Save / Cancel buttons (above gallery) ────────
                   if (_isEditing) ...[
-                    const SizedBox(height: 28),
                     Row(
                       children: [
                         Expanded(
@@ -442,7 +440,11 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 20),
                   ],
+
+                  // ── Gallery section ──────────────────────────────
+                  _CharacterGallery(character: c),
                 ],
               ),
             ),
@@ -546,11 +548,114 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
     );
   }
 
-  void _addTag() {
-    final tag = _tagController.text.trim();
-    if (tag.isNotEmpty && !_tags.contains(tag)) {
-      setState(() { _tags.add(tag); _tagController.clear(); });
-    }
+  Widget _buildTagSection(BuildContext context) {
+    final provider = context.watch<CharacterProvider>();
+    final allTags = provider.allTags;
+    // Resolve tag IDs to Tag objects — skip any deleted/unknown IDs
+    final assignedTags = _tags
+        .map((id) => provider.tagById(id))
+        .whereType<Tag>()
+        .toList();
+    // Tags not yet assigned to this character
+    final unassignedTags =
+        allTags.where((t) => !_tags.contains(t.id)).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Assigned tags as chips
+        if (assignedTags.isEmpty && !_isEditing)
+          const Text('No tags',
+              style: TextStyle(
+                  color: AppTheme.textSecondary, fontSize: 13))
+        else if (assignedTags.isNotEmpty)
+          Material(
+            type: MaterialType.transparency,
+            child: Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: assignedTags
+                  .map((tag) => TagChip(
+                        tag: tag,
+                        onDeleted: _isEditing
+                            ? () => setState(() => _tags.remove(tag.id))
+                            : null,
+                      ))
+                  .toList(),
+            ),
+          ),
+
+        if (_isEditing) ...[
+          const SizedBox(height: 10),
+          // Unassigned tags to pick from
+          if (unassignedTags.isNotEmpty) ...[
+            const Text('Add tag:',
+                style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500)),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: unassignedTags
+                  .map((tag) => GestureDetector(
+                        onTap: () =>
+                            setState(() => _tags.add(tag.id)),
+                        child: Container(
+                          padding: const EdgeInsets.fromLTRB(
+                              8, 3, 8, 3),
+                          decoration: BoxDecoration(
+                            color: AppTheme.bgSurface,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                                color: tag.color.withOpacity(0.4)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.add,
+                                  size: 11,
+                                  color: tag.color.withOpacity(0.7)),
+                              const SizedBox(width: 3),
+                              Text(tag.name,
+                                  style: TextStyle(
+                                      color: tag.color.withOpacity(0.7),
+                                      fontSize: 11)),
+                            ],
+                          ),
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ] else if (allTags.isEmpty)
+            const Text('No tags yet.',
+                style: TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 11)),
+
+          const SizedBox(height: 8),
+          // Manage tags shortcut
+          GestureDetector(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const TagsScreen()),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.label_outline_rounded,
+                    size: 12, color: AppTheme.accent.withOpacity(0.8)),
+                const SizedBox(width: 4),
+                Text('Manage tags →',
+                    style: TextStyle(
+                        color: AppTheme.accent.withOpacity(0.8),
+                        fontSize: 11)),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
   }
 
   Widget _fieldLabel(String text) => Text(text,
@@ -634,6 +739,628 @@ class _DetailApplyButtonState extends State<_DetailApplyButton> {
           color: isApplied ? AppTheme.accent : AppTheme.borderColor,
         ),
         textStyle: const TextStyle(fontSize: 12),
+      ),
+    );
+  }
+}
+
+// ── Character gallery ─────────────────────────────────────────────
+
+const List<String> _kImageExts = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+
+bool _isImagePath(String path) {
+  final ext = path.split('.').last.toLowerCase();
+  return _kImageExts.contains(ext);
+}
+
+class _CharacterGallery extends StatefulWidget {
+  final Character character;
+  const _CharacterGallery({required this.character});
+
+  @override
+  State<_CharacterGallery> createState() => _CharacterGalleryState();
+}
+
+class _CharacterGalleryState extends State<_CharacterGallery> {
+  bool _isDragOver = false;
+  int _columns = 3;
+  Set<String> _blurredItems = {};
+  static const double _cellSpacing = 4.0;
+
+  // Size options: label, icon, column count
+  static const _sizeOptions = [
+    (label: 'Extra large', icon: Icons.crop_square_rounded,      columns: 2),
+    (label: 'Large',       icon: Icons.view_agenda_outlined,     columns: 3),
+    (label: 'Medium',      icon: Icons.grid_on_rounded,          columns: 4),
+    (label: 'Small',       icon: Icons.apps_rounded,             columns: 5),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    final hive = HiveService();
+    _columns = hive.getGalleryColumns();
+    _blurredItems = hive.getBlurredItems();
+  }
+
+  Future<void> _addFiles(List<String> paths) async {
+    final provider = context.read<CharacterProvider>();
+    final validPaths = paths.where(_isImagePath).toList();
+    for (final path in validPaths) {
+      await provider.addGalleryItem(widget.character.id, path);
+    }
+    if (validPaths.isEmpty && paths.isNotEmpty && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('Only image files are supported (jpg, png, gif, webp)')),
+      );
+    }
+  }
+
+  Future<void> _pickFiles() async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: _kImageExts,
+      allowMultiple: true,
+      dialogTitle: 'Add images to gallery',
+    );
+    if (result != null) {
+      final paths = result.files
+          .where((f) => f.path != null)
+          .map((f) => f.path!)
+          .toList();
+      await _addFiles(paths);
+    }
+  }
+
+  void _viewImage(BuildContext context, List<GalleryItem> items, int index) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.85),
+      builder: (_) => _GalleryViewer(items: items, initialIndex: index),
+    );
+  }
+
+  void _confirmDelete(GalleryItem item) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: const Text('Remove image?'),
+        content: const Text(
+            'This will permanently delete the image file from storage.',
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              await context.read<CharacterProvider>().deleteGalleryItem(item);
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _toggleBlur(String itemId) async {
+    await HiveService().toggleBlurredItem(itemId);
+    setState(() {
+      if (_blurredItems.contains(itemId)) {
+        _blurredItems.remove(itemId);
+      } else {
+        _blurredItems.add(itemId);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<CharacterProvider>();
+    final items = provider.getGalleryItems(widget.character.id);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Header row
+        Row(
+          children: [
+            const Text('Gallery',
+                style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500)),
+            const SizedBox(width: 6),
+            if (items.isNotEmpty)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSurface,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text('${items.length}',
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 10)),
+              ),
+            const Spacer(),
+            // Size picker
+            PopupMenuButton<int>(
+              color: AppTheme.bgCard,
+              tooltip: 'Image size',
+              icon: Icon(
+                _sizeOptions
+                    .firstWhere((o) => o.columns == _columns,
+                        orElse: () => _sizeOptions[1])
+                    .icon,
+                size: 15,
+                color: AppTheme.textSecondary,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: AppTheme.borderColor),
+              ),
+              onSelected: (cols) async {
+                setState(() => _columns = cols);
+                await HiveService().saveGalleryColumns(cols);
+              },
+              itemBuilder: (_) => _sizeOptions
+                  .map((opt) => PopupMenuItem<int>(
+                        value: opt.columns,
+                        child: Row(
+                          children: [
+                            Icon(opt.icon,
+                                size: 15,
+                                color: _columns == opt.columns
+                                    ? AppTheme.accent
+                                    : AppTheme.textSecondary),
+                            const SizedBox(width: 10),
+                            Text(opt.label,
+                                style: TextStyle(
+                                    color: _columns == opt.columns
+                                        ? AppTheme.accent
+                                        : AppTheme.textPrimary,
+                                    fontSize: 13)),
+                            if (_columns == opt.columns) ...[
+                              const Spacer(),
+                              Icon(Icons.check_rounded,
+                                  size: 13, color: AppTheme.accent),
+                            ],
+                          ],
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ],
+        ),
+        const SizedBox(height: 10),
+
+        DropTarget(
+          onDragDone: (details) =>
+              _addFiles(details.files.map((f) => f.path).toList()),
+          onDragEntered: (_) => setState(() => _isDragOver = true),
+          onDragExited: (_) => setState(() => _isDragOver = false),
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: _isDragOver
+                  ? AppTheme.accent.withOpacity(0.07)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: _isDragOver
+                    ? AppTheme.accent.withOpacity(0.5)
+                    : Colors.transparent,
+              ),
+            ),
+            // LayoutBuilder so cell size is always correct
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final availableWidth = constraints.maxWidth - 8;
+                final cellSize = (availableWidth -
+                        (_columns - 1) * _cellSpacing) /
+                    _columns;
+
+                // All items + the Add button at position 0
+                final totalCount = items.length + 1;
+                final rowCount = (totalCount / _columns).ceil();
+
+                return Column(
+                  children: List.generate(rowCount, (row) {
+                    return Padding(
+                      padding: EdgeInsets.only(
+                          bottom: row < rowCount - 1 ? _cellSpacing : 0),
+                      child: Row(
+                        children: List.generate(_columns, (col) {
+                          final index = row * _columns + col;
+                          final isLast = col == _columns - 1;
+
+                          Widget cell;
+                          if (index == 0) {
+                            // Add button — always first
+                            cell = _buildAddButton(cellSize);
+                          } else if (index - 1 < items.length) {
+                            final item = items[index - 1];
+                            final fileExists =
+                                File(item.filePath).existsSync();
+                            cell = _GalleryThumb(
+                              item: item,
+                              fileExists: fileExists,
+                              size: cellSize,
+                              isBlurred: _blurredItems.contains(item.id),
+                              onTap: fileExists
+                                  ? () => _viewImage(
+                                      context, items, index - 1)
+                                  : null,
+                              onDelete: () => _confirmDelete(item),
+                              onToggleBlur: () => _toggleBlur(item.id),
+                            );
+                          } else {
+                            // Empty placeholder to fill the last row
+                            cell = SizedBox(
+                                width: cellSize, height: cellSize);
+                          }
+
+                          return Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              cell,
+                              if (!isLast)
+                                SizedBox(width: _cellSpacing),
+                            ],
+                          );
+                        }),
+                      ),
+                    );
+                  }),
+                );
+              },
+            ),
+          ),
+        ),
+
+        if (_isDragOver)
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('Drop images here',
+                style: TextStyle(color: AppTheme.accent, fontSize: 11)),
+          )
+        else if (items.isEmpty)
+          const Padding(
+            padding: EdgeInsets.only(top: 4),
+            child: Text(
+                'Add images to build a gallery for this character',
+                style: TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 11)),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildAddButton(double size) {
+    return GestureDetector(
+      onTap: _pickFiles,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: AppTheme.bgSurface,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: AppTheme.borderColor),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_photo_alternate_outlined,
+                size: 28, color: AppTheme.accent.withOpacity(0.7)),
+            const SizedBox(height: 5),
+            Text('Add',
+                style: TextStyle(
+                    color: AppTheme.accent.withOpacity(0.8),
+                    fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Gallery thumbnail ───────────────────────────────────────────
+
+class _GalleryThumb extends StatefulWidget {
+  final GalleryItem item;
+  final bool fileExists;
+  final double size;
+  final bool isBlurred;
+  final VoidCallback? onTap;
+  final VoidCallback onDelete;
+  final VoidCallback onToggleBlur;
+
+  const _GalleryThumb({
+    required this.item,
+    required this.fileExists,
+    required this.size,
+    required this.isBlurred,
+    required this.onTap,
+    required this.onDelete,
+    required this.onToggleBlur,
+  });
+
+  @override
+  State<_GalleryThumb> createState() => _GalleryThumbState();
+}
+
+class _GalleryThumbState extends State<_GalleryThumb> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          width: widget.size,
+          height: widget.size,
+          decoration: BoxDecoration(
+            color: AppTheme.bgSurface,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(color: AppTheme.borderColor),
+          ),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Image (with optional blur)
+              ClipRRect(
+                borderRadius: BorderRadius.circular(5),
+                child: widget.fileExists
+                    ? widget.isBlurred
+                        ? ImageFiltered(
+                            imageFilter: ImageFilter.blur(
+                                sigmaX: 18, sigmaY: 18),
+                            child: Image.file(
+                              File(widget.item.filePath),
+                              fit: BoxFit.cover,
+                              gaplessPlayback: true,
+                            ),
+                          )
+                        : Image.file(
+                            File(widget.item.filePath),
+                            fit: BoxFit.cover,
+                            gaplessPlayback: true,
+                          )
+                    : const Center(
+                        child: Icon(Icons.broken_image_outlined,
+                            size: 24, color: AppTheme.textSecondary)),
+              ),
+
+              // Blurred overlay label
+              if (widget.isBlurred)
+                Center(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.45),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(Icons.visibility_off_outlined,
+                        size: 16, color: Colors.white),
+                  ),
+                ),
+
+              // Hover controls
+              if (_hovered) ...[
+                // Delete button — top right
+                Positioned(
+                  top: 4,
+                  right: 4,
+                  child: GestureDetector(
+                    onTap: widget.onDelete,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(Icons.close,
+                          size: 11, color: Colors.white),
+                    ),
+                  ),
+                ),
+                // Blur toggle button — top left
+                Positioned(
+                  top: 4,
+                  left: 4,
+                  child: GestureDetector(
+                    onTap: widget.onToggleBlur,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.65),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Icon(
+                        widget.isBlurred
+                            ? Icons.visibility_rounded
+                            : Icons.visibility_off_outlined,
+                        size: 11,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+                // Zoom icon — bottom right (only when not blurred)
+                if (!widget.isBlurred && widget.fileExists)
+                  Positioned(
+                    bottom: 4,
+                    right: 4,
+                    child: GestureDetector(
+                      onTap: widget.onTap,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.55),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: const Icon(Icons.zoom_out_map_rounded,
+                            size: 10, color: Colors.white),
+                      ),
+                    ),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Full-screen gallery viewer with swipe navigation ────────────────
+
+class _GalleryViewer extends StatefulWidget {
+  final List<GalleryItem> items;
+  final int initialIndex;
+  const _GalleryViewer({
+    required this.items,
+    required this.initialIndex,
+  });
+
+  @override
+  State<_GalleryViewer> createState() => _GalleryViewerState();
+}
+
+class _GalleryViewerState extends State<_GalleryViewer> {
+  late PageController _pageCtrl;
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+    _pageCtrl = PageController(initialPage: widget.initialIndex);
+  }
+
+  @override
+  void dispose() {
+    _pageCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.black,
+      insetPadding: const EdgeInsets.all(16),
+      child: Stack(
+        children: [
+          // Page view — swipe left/right
+          PageView.builder(
+            controller: _pageCtrl,
+            itemCount: widget.items.length,
+            onPageChanged: (i) => setState(() => _currentIndex = i),
+            itemBuilder: (_, i) {
+              final item = widget.items[i];
+              return InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 6,
+                child: Image.file(
+                  File(item.filePath),
+                  fit: BoxFit.contain,
+                  gaplessPlayback: true,
+                ),
+              );
+            },
+          ),
+          // Close button
+          Positioned(
+            top: 8,
+            right: 8,
+            child: GestureDetector(
+              onTap: () => Navigator.pop(context),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(Icons.close,
+                    color: Colors.white, size: 18),
+              ),
+            ),
+          ),
+          // Counter — top left
+          if (widget.items.length > 1)
+            Positioned(
+              top: 10,
+              left: 12,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.55),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '${_currentIndex + 1} / ${widget.items.length}',
+                  style: const TextStyle(
+                      color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ),
+          // Left arrow
+          if (_currentIndex > 0)
+            Positioned(
+              left: 8,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: GestureDetector(
+                  onTap: () => _pageCtrl.previousPage(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOut),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.45),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(Icons.chevron_left_rounded,
+                        color: Colors.white, size: 22),
+                  ),
+                ),
+              ),
+            ),
+          // Right arrow
+          if (_currentIndex < widget.items.length - 1)
+            Positioned(
+              right: 8,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                child: GestureDetector(
+                  onTap: () => _pageCtrl.nextPage(
+                      duration: const Duration(milliseconds: 200),
+                      curve: Curves.easeOut),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.45),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Icon(Icons.chevron_right_rounded,
+                        color: Colors.white, size: 22),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

@@ -5,7 +5,7 @@ import '../main.dart';
 import '../providers/character_provider.dart';
 import '../services/hive_service.dart';
 import '../theme/app_theme.dart';
-import 'add_character_screen.dart';
+import '../widgets/tag_chip.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -18,8 +18,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _migrating = false;
   int _migProgress = 0;
   int _migTotal = 0;
-  List<String> _scannedFiles = [];
-  bool _scanning = false;
 
   // ── Save location ──────────────────────────────────────────────
 
@@ -102,23 +100,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  // ── Scan game folder ───────────────────────────────────────────
-
-  Future<void> _scanGameFolder(CharacterProvider provider) async {
-    setState(() { _scanning = true; _scannedFiles = []; });
-    final files = await provider.scanGameFolderForUnregistered();
-    if (mounted) setState(() { _scanning = false; _scannedFiles = files; });
-  }
-
   // ── Accent color ───────────────────────────────────────────────
 
   Future<void> _setAccent(Color color) async {
     AppTheme.setAccent(color);
     final hive = HiveService();
     await hive.saveAccentColor(color);
-    // Notify the app root to rebuild with new theme
     PSO2App.themeNotifier.value = color;
     if (mounted) setState(() {});
+  }
+
+  Future<void> _openColorWheel(BuildContext context) async {
+    final picked = await showColorPickerDialog(
+      context,
+      AppTheme.accent,
+      title: 'App accent colour',
+    );
+    if (picked != null) await _setAccent(picked);
   }
 
   @override
@@ -131,14 +129,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
             padding: const EdgeInsets.all(24),
             children: [
 
-              // ── Theme ────────────────────────────────────────
+              // ── Appearance ───────────────────────────────────
               _sectionHeader('Appearance'),
               const SizedBox(height: 6),
               const Text(
                 'Choose an accent colour for the app.',
-                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+                style: TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 12),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
+
+              // Current colour swatch + open wheel button
+              Row(
+                children: [
+                  GestureDetector(
+                    onTap: () => _openColorWheel(context),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: AppTheme.accent,
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: const Icon(Icons.colorize_rounded,
+                          size: 20, color: Colors.white),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  OutlinedButton.icon(
+                    onPressed: () => _openColorWheel(context),
+                    icon: const Icon(Icons.palette_outlined, size: 14),
+                    label: const Text('Open colour wheel',
+                        style: TextStyle(fontSize: 12)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppTheme.textSecondary,
+                      side: const BorderSide(color: AppTheme.borderColor),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              // Quick presets
+              const Text('Quick presets',
+                  style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500)),
+              const SizedBox(height: 8),
               Wrap(
                 spacing: 10,
                 runSpacing: 10,
@@ -203,8 +245,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 subtitle: provider.saveLocation ??
                     'Default (Documents\\PSO2CharacterManager)',
                 trailing: ElevatedButton(
-                  onPressed:
-                      _migrating ? null : () => _changeSaveLocation(provider),
+                  onPressed: _migrating
+                      ? null
+                      : () => _changeSaveLocation(provider),
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 16, vertical: 8),
@@ -262,72 +305,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-
-              // ── Scan game folder ─────────────────────────────
-              _sectionHeader('Scan for unregistered files'),
-              const SizedBox(height: 6),
-              const Text(
-                'Scan your game folder for character files that aren\'t '
-                'in your library yet.',
-                style:
-                    TextStyle(color: AppTheme.textSecondary, fontSize: 12),
-              ),
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  ElevatedButton.icon(
-                    onPressed:
-                        provider.gameFolderPath == null || _scanning
-                            ? null
-                            : () => _scanGameFolder(provider),
-                    icon: _scanning
-                        ? const SizedBox(
-                            width: 14,
-                            height: 14,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2))
-                        : const Icon(Icons.search_rounded, size: 15),
-                    label: Text(_scanning ? 'Scanning…' : 'Scan now'),
-                  ),
-                  if (provider.gameFolderPath == null) ...[
-                    const SizedBox(width: 12),
-                    const Text('Set game folder first',
-                        style: TextStyle(
-                            color: AppTheme.textSecondary, fontSize: 12)),
-                  ],
-                ],
-              ),
-              if (_scannedFiles.isNotEmpty) ...[
-                const SizedBox(height: 16),
-                Text(
-                    'Found ${_scannedFiles.length} unregistered file${_scannedFiles.length == 1 ? '' : 's'}:',
-                    style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500)),
-                const SizedBox(height: 8),
-                ..._scannedFiles.map((path) => _ScannedFileRow(
-                      filePath: path,
-                      onImport: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => AddCharacterScreen(
-                                prefilledFilePath: path),
-                          ),
-                        ).then((_) =>
-                            setState(() => _scannedFiles.remove(path)));
-                      },
-                      onDismiss: () =>
-                          setState(() => _scannedFiles.remove(path)),
-                    )),
-              ],
-              if (_scannedFiles.isEmpty && !_scanning && _migTotal == 0) ...[
-                const SizedBox(height: 8),
-                const Text('No unregistered files found.',
-                    style: TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 12)),
-              ],
             ],
           ),
         );
@@ -385,96 +362,5 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ],
       ),
     );
-  }
-}
-
-class _ScannedFileRow extends StatelessWidget {
-  final String filePath;
-  final VoidCallback onImport;
-  final VoidCallback onDismiss;
-
-  const _ScannedFileRow({
-    required this.filePath,
-    required this.onImport,
-    required this.onDismiss,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final fileName = filePath.split(r'\').last;
-    final ext = fileName.split('.').last.toLowerCase();
-    final raceGender = _raceGenderFromExt(ext);
-    final raceColor = AppTheme.raceColor(raceGender['race'] ?? 'Unknown');
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: AppTheme.bgCard,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppTheme.borderColor),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: raceColor.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: raceColor.withOpacity(0.4)),
-            ),
-            child: Text(ext.toUpperCase(),
-                style: TextStyle(
-                    color: raceColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600)),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(fileName,
-                    style: const TextStyle(
-                        color: AppTheme.textPrimary, fontSize: 12)),
-                Text('${raceGender['race']} · ${raceGender['gender']}',
-                    style: TextStyle(color: raceColor, fontSize: 10)),
-              ],
-            ),
-          ),
-          TextButton(
-            onPressed: onDismiss,
-            style: TextButton.styleFrom(
-                foregroundColor: AppTheme.textSecondary,
-                padding: const EdgeInsets.symmetric(horizontal: 8)),
-            child: const Text('Skip', style: TextStyle(fontSize: 12)),
-          ),
-          const SizedBox(width: 4),
-          ElevatedButton(
-            onPressed: onImport,
-            style: ElevatedButton.styleFrom(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-              textStyle: const TextStyle(fontSize: 12),
-            ),
-            child: const Text('Import'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Map<String, String> _raceGenderFromExt(String ext) {
-    const map = {
-      'fhp': {'race': 'Human', 'gender': 'Female'},
-      'mhp': {'race': 'Human', 'gender': 'Male'},
-      'fnp': {'race': 'Newman', 'gender': 'Female'},
-      'mnp': {'race': 'Newman', 'gender': 'Male'},
-      'fdp': {'race': 'Deuman', 'gender': 'Female'},
-      'mdp': {'race': 'Deuman', 'gender': 'Male'},
-      'fcp': {'race': 'CAST', 'gender': 'Female'},
-      'mcp': {'race': 'CAST', 'gender': 'Male'},
-    };
-    return map[ext] ?? {'race': 'Unknown', 'gender': 'Unknown'};
   }
 }
