@@ -5,10 +5,34 @@ import 'package:provider/provider.dart';
 import '../models/collection.dart';
 import '../providers/character_provider.dart';
 import '../services/file_service.dart';
+import '../services/hive_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/character_card.dart';
 import '../widgets/tag_chip.dart';
 import 'character_detail_screen.dart';
+
+// ── Collection sort options ───────────────────────────────────────
+
+enum CollectionSortOption { nameAZ, nameZA, mostCharacters, newestFirst }
+
+extension CollectionSortOptionX on CollectionSortOption {
+  String get label {
+    switch (this) {
+      case CollectionSortOption.nameAZ:         return 'Name A → Z';
+      case CollectionSortOption.nameZA:         return 'Name Z → A';
+      case CollectionSortOption.mostCharacters: return 'Most characters';
+      case CollectionSortOption.newestFirst:    return 'Newest first';
+    }
+  }
+  IconData get icon {
+    switch (this) {
+      case CollectionSortOption.nameAZ:         return Icons.sort_by_alpha_rounded;
+      case CollectionSortOption.nameZA:         return Icons.sort_by_alpha_rounded;
+      case CollectionSortOption.mostCharacters: return Icons.people_outline_rounded;
+      case CollectionSortOption.newestFirst:    return Icons.schedule_rounded;
+    }
+  }
+}
 
 class CollectionsScreen extends StatefulWidget {
   const CollectionsScreen({super.key});
@@ -54,6 +78,26 @@ class _CollectionGridView extends StatefulWidget {
 
 class _CollectionGridViewState extends State<_CollectionGridView> {
   String _search = '';
+  CollectionSortOption _sortOption = CollectionSortOption.nameAZ;
+
+  List<Collection> _sorted(List<Collection> cols, CharacterProvider provider) {
+    final list = List<Collection>.from(cols);
+    switch (_sortOption) {
+      case CollectionSortOption.nameAZ:
+        list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      case CollectionSortOption.nameZA:
+        list.sort((a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+      case CollectionSortOption.mostCharacters:
+        list.sort((a, b) => provider.getCharacterCountForCollection(b.id)
+            .compareTo(provider.getCharacterCountForCollection(a.id)));
+      case CollectionSortOption.newestFirst:
+        break; // Hive insertion order = newest last, so reverse
+    }
+    if (_sortOption == CollectionSortOption.newestFirst) {
+      return list.reversed.toList();
+    }
+    return list;
+  }
 
   void _showCreateDialog(BuildContext context) {
     showDialog(
@@ -83,6 +127,7 @@ class _CollectionGridViewState extends State<_CollectionGridView> {
                   c.name.toLowerCase().contains(_search.toLowerCase()))
               .toList();
         }
+        collections = _sorted(collections, provider);
 
         return Column(
           children: [
@@ -127,6 +172,52 @@ class _CollectionGridViewState extends State<_CollectionGridView> {
                       style: const TextStyle(
                           color: AppTheme.textPrimary, fontSize: 12),
                     ),
+                  ),
+                  const SizedBox(width: 10),
+                  // Sort button
+                  PopupMenuButton<CollectionSortOption>(
+                    color: AppTheme.bgCard,
+                    tooltip: 'Sort',
+                    icon: Icon(
+                      _sortOption.icon,
+                      size: 16,
+                      color: AppTheme.textSecondary,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: const BorderSide(
+                          color: AppTheme.borderColor),
+                    ),
+                    onSelected: (opt) =>
+                        setState(() => _sortOption = opt),
+                    itemBuilder: (_) =>
+                        CollectionSortOption.values
+                            .map((opt) => PopupMenuItem(
+                                  value: opt,
+                                  child: Row(
+                                    children: [
+                                      Icon(opt.icon,
+                                          size: 14,
+                                          color: _sortOption == opt
+                                              ? AppTheme.accent
+                                              : AppTheme.textSecondary),
+                                      const SizedBox(width: 8),
+                                      Text(opt.label,
+                                          style: TextStyle(
+                                              fontSize: 13,
+                                              color: _sortOption == opt
+                                                  ? AppTheme.accent
+                                                  : AppTheme.textPrimary)),
+                                      if (_sortOption == opt) ...[
+                                        const Spacer(),
+                                        Icon(Icons.check_rounded,
+                                            size: 13,
+                                            color: AppTheme.accent),
+                                      ],
+                                    ],
+                                  ),
+                                ))
+                            .toList(),
                   ),
                   const SizedBox(width: 10),
                   ElevatedButton.icon(
@@ -427,24 +518,163 @@ class _CollectionDetailView extends StatefulWidget {
 
 class _CollectionDetailViewState extends State<_CollectionDetailView> {
   String _search = '';
+  int _cardSize = 2;
+  SortOption _charSortOption = SortOption.newestFirst;
+  bool _favouritesOnTop = true;
+
+  static const List<double> _sizeExtents  = [120, 160, 200, 260];
+  static const List<double> _aspectRatios = [0.58, 0.62, 0.68, 0.72];
+
+  @override
+  void initState() {
+    super.initState();
+    _cardSize = HiveService().getCardSize();
+  }
+
+  void _showEditDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => _CollectionDialog(
+        mode: _CollectionDialogMode.edit,
+        collection: widget.collection,
+        onSave: (name, desc, thumbPath, accentVal) async {
+          widget.collection.name        = name;
+          widget.collection.description = desc;
+          widget.collection.accentColorValue = accentVal;
+          await ctx
+              .read<CharacterProvider>()
+              .updateCollection(widget.collection);
+        },
+      ),
+    );
+  }
+
+  void _showAddCharactersDialog(
+      BuildContext context, CharacterProvider provider) {
+    showDialog(
+      context: context,
+      builder: (_) => _AddCharactersDialog(
+        collection: widget.collection,
+        provider: provider,
+      ),
+    );
+  }
+
+  void _viewFullImage(BuildContext context, String path) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.black,
+        insetPadding: const EdgeInsets.all(16),
+        child: Stack(
+          children: [
+            InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 5,
+              child: Image.file(File(path), fit: BoxFit.contain),
+            ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Icon(Icons.close,
+                      color: Colors.white, size: 18),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _fieldLabel(String text) => Text(text,
+      style: const TextStyle(
+          color: AppTheme.textSecondary,
+          fontSize: 12,
+          fontWeight: FontWeight.w500));
+
+  Widget _badge(Widget child, Color color) => Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withOpacity(0.4)),
+        ),
+        child: child,
+      );
+
+  IconData _sizeIcon(int size) {
+    switch (size) {
+      case 0:  return Icons.grid_on_rounded;
+      case 1:  return Icons.grid_view_rounded;
+      case 2:  return Icons.view_agenda_outlined;
+      case 3:  return Icons.crop_free_rounded;
+      default: return Icons.grid_view_rounded;
+    }
+  }
+
+  PopupMenuItem<int> _sizeMenuItem(
+      int value, String label, IconData icon) {
+    final selected = _cardSize == value;
+    return PopupMenuItem<int>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon,
+              size: 15,
+              color: selected
+                  ? AppTheme.accent
+                  : AppTheme.textSecondary),
+          const SizedBox(width: 10),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 13,
+                  color: selected
+                      ? AppTheme.accent
+                      : AppTheme.textPrimary)),
+          if (selected) ...[
+            const Spacer(),
+            Icon(Icons.check_rounded,
+                size: 13, color: AppTheme.accent),
+          ],
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<CharacterProvider>(
       builder: (context, provider, _) {
-        var chars =
-            provider.getCharactersForCollection(widget.collection.id);
+        final col       = widget.collection;
+        final accentCol = col.accentColor ?? AppTheme.accent;
+        final hasThumb  = col.thumbnailPath != null &&
+            File(col.thumbnailPath!).existsSync();
+        final count =
+            provider.getCharacterCountForCollection(col.id);
+
+        var chars = provider.sortedCharactersForCollection(
+            col.id, _charSortOption, _favouritesOnTop);
         if (_search.isNotEmpty) {
           chars = chars
-              .where((c) =>
-                  c.name.toLowerCase().contains(_search.toLowerCase()) ||
-                  c.tags.any((t) =>
-                      t.toLowerCase().contains(_search.toLowerCase())))
+              .where((c) => c.name
+                  .toLowerCase()
+                  .contains(_search.toLowerCase()))
               .toList();
         }
 
         return Column(
           children: [
+            // ── Top bar ─────────────────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
               decoration: const BoxDecoration(
@@ -456,27 +686,27 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                 children: [
                   GestureDetector(
                     onTap: widget.onBack,
-                    // No const — accent is dynamic
                     child: Row(
                       children: [
                         Icon(Icons.arrow_back_rounded,
-                            size: 16, color: AppTheme.accent),
+                            size: 16, color: accentCol),
                         const SizedBox(width: 4),
                         Text('Collections',
                             style: TextStyle(
-                                color: AppTheme.accent, fontSize: 13)),
+                                color: accentCol, fontSize: 13)),
                       ],
                     ),
                   ),
                   const SizedBox(width: 8),
                   const Text('/',
                       style: TextStyle(
-                          color: AppTheme.textSecondary, fontSize: 13)),
+                          color: AppTheme.textSecondary,
+                          fontSize: 13)),
                   const SizedBox(width: 8),
-                  const Icon(Icons.folder_rounded,
-                      size: 14, color: AppTheme.accentGold),
+                  Icon(Icons.folder_rounded,
+                      size: 14, color: accentCol),
                   const SizedBox(width: 5),
-                  Text(widget.collection.name,
+                  Text(col.name,
                       style: const TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 14,
@@ -489,13 +719,13 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                       color: AppTheme.bgSurface,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
-                        '${provider.getCharacterCountForCollection(widget.collection.id)}',
+                    child: Text('$count',
                         style: const TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 11)),
                   ),
                   const Spacer(),
+                  // Search
                   SizedBox(
                     width: 200,
                     child: TextField(
@@ -520,71 +750,787 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                           color: AppTheme.textPrimary, fontSize: 12),
                     ),
                   ),
+                  const SizedBox(width: 8),
+                  // Size picker
+                  PopupMenuButton<int>(
+                    color: AppTheme.bgCard,
+                    tooltip: 'Card size',
+                    icon: Icon(
+                      _sizeIcon(_cardSize),
+                      size: 16,
+                      color: AppTheme.textSecondary,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: const BorderSide(
+                          color: AppTheme.borderColor),
+                    ),
+                    onSelected: (i) async {
+                      setState(() => _cardSize = i);
+                      await HiveService().saveCardSize(i);
+                    },
+                    itemBuilder: (_) => [
+                      _sizeMenuItem(3, 'Extra large',
+                          Icons.crop_free_rounded),
+                      _sizeMenuItem(2, 'Large',
+                          Icons.view_agenda_outlined),
+                      _sizeMenuItem(1, 'Medium',
+                          Icons.grid_view_rounded),
+                      _sizeMenuItem(0, 'Small',
+                          Icons.grid_on_rounded),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
+                  // Character sort button
+                  PopupMenuButton<String>(
+                    color: AppTheme.bgCard,
+                    tooltip: 'Sort characters',
+                    icon: Icon(
+                      _charSortOption.icon,
+                      size: 16,
+                      color: AppTheme.textSecondary,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: const BorderSide(
+                          color: AppTheme.borderColor),
+                    ),
+                    onSelected: (value) {
+                      if (value == '__fav__') {
+                        setState(() =>
+                            _favouritesOnTop = !_favouritesOnTop);
+                      } else {
+                        final opt = SortOption.values
+                            .firstWhere((o) => o.name == value);
+                        setState(() => _charSortOption = opt);
+                      }
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem<String>(
+                        value: '__fav__',
+                        child: Row(
+                          children: [
+                            Icon(
+                              _favouritesOnTop
+                                  ? Icons.check_box_rounded
+                                  : Icons.check_box_outline_blank_rounded,
+                              size: 14,
+                              color: _favouritesOnTop
+                                  ? Colors.pinkAccent
+                                  : AppTheme.textSecondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text('Favourites on top',
+                                style: TextStyle(
+                                    color: _favouritesOnTop
+                                        ? Colors.pinkAccent
+                                        : AppTheme.textPrimary,
+                                    fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      ...SortOption.values.map((opt) =>
+                          PopupMenuItem<String>(
+                            value: opt.name,
+                            child: Row(
+                              children: [
+                                Icon(opt.icon,
+                                    size: 14,
+                                    color: _charSortOption == opt
+                                        ? AppTheme.accent
+                                        : AppTheme.textSecondary),
+                                const SizedBox(width: 8),
+                                Text(opt.label,
+                                    style: TextStyle(
+                                        fontSize: 13,
+                                        color: _charSortOption == opt
+                                            ? AppTheme.accent
+                                            : AppTheme.textPrimary)),
+                                if (_charSortOption == opt) ...[
+                                  const Spacer(),
+                                  Icon(Icons.check_rounded,
+                                      size: 13,
+                                      color: AppTheme.accent),
+                                ],
+                              ],
+                            ),
+                          )),
+                    ],
+                  ),
                 ],
               ),
             ),
+
+            // ── Body — mirrors character detail layout ────────────
             Expanded(
-              child: chars.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            _search.isNotEmpty
-                                ? Icons.search_off_rounded
-                                : Icons.folder_open_outlined,
-                            size: 56,
-                            color: AppTheme.textSecondary.withOpacity(0.3),
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+
+                    // ── Left panel — thumbnail + info ───────────
+                    Column(
+                      children: [
+                        // Thumbnail
+                        GestureDetector(
+                          onTap: hasThumb
+                              ? () => _viewFullImage(
+                                  context, col.thumbnailPath!)
+                              : null,
+                          child: Container(
+                            width: 240,
+                            height: 270,
+                            decoration: BoxDecoration(
+                              color: AppTheme.bgSurface,
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                  color: accentCol.withOpacity(0.4)),
+                            ),
+                            child: hasThumb
+                                ? Stack(
+                                    fit: StackFit.expand,
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius:
+                                            BorderRadius.circular(11),
+                                        child: Image.file(
+                                            File(col.thumbnailPath!),
+                                            fit: BoxFit.cover),
+                                      ),
+                                      Positioned(
+                                        bottom: 8,
+                                        right: 8,
+                                        child: Container(
+                                          padding:
+                                              const EdgeInsets.all(5),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black
+                                                .withOpacity(0.55),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                          ),
+                                          child: const Icon(
+                                              Icons.zoom_out_map_rounded,
+                                              size: 14,
+                                              color: Colors.white),
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : Column(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.center,
+                                    children: [
+                                      Icon(Icons.folder_open_outlined,
+                                          size: 52,
+                                          color:
+                                              accentCol.withOpacity(0.35)),
+                                      const SizedBox(height: 10),
+                                      Text('No cover image',
+                                          style: TextStyle(
+                                              color: accentCol
+                                                  .withOpacity(0.5),
+                                              fontSize: 12)),
+                                    ],
+                                  ),
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _search.isNotEmpty
-                                ? 'No results for "$_search"'
-                                : 'This collection is empty',
-                            style: const TextStyle(
-                                color: AppTheme.textSecondary,
-                                fontSize: 15),
-                          ),
-                          if (_search.isEmpty) ...[
-                            const SizedBox(height: 6),
-                            const Text(
-                              'Edit a character and assign it to this collection',
-                              style: TextStyle(
-                                  color: AppTheme.textSecondary,
-                                  fontSize: 12),
+                        ),
+
+                        const SizedBox(height: 12),
+
+                        // Accent colour + count badges
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _badge(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 8,
+                                    height: 8,
+                                    decoration: BoxDecoration(
+                                        color: accentCol,
+                                        shape: BoxShape.circle),
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    '#${accentCol.value.toRadixString(16).substring(2).toUpperCase()}',
+                                    style: TextStyle(
+                                        color: accentCol,
+                                        fontSize: 11,
+                                        fontFamily: 'monospace'),
+                                  ),
+                                ],
+                              ),
+                              accentCol,
+                            ),
+                            const SizedBox(width: 8),
+                            _badge(
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                      Icons.people_outline_rounded,
+                                      size: 11,
+                                      color: AppTheme.textSecondary),
+                                  const SizedBox(width: 4),
+                                  Text('$count',
+                                      style: const TextStyle(
+                                          color: AppTheme.textSecondary,
+                                          fontSize: 11)),
+                                ],
+                              ),
+                              AppTheme.borderColor,
                             ),
                           ],
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // Edit button
+                        SizedBox(
+                          width: 240,
+                          child: OutlinedButton.icon(
+                            onPressed: () => _showEditDialog(context),
+                            icon: const Icon(Icons.edit_outlined,
+                                size: 14),
+                            label: const Text('Edit collection',
+                                style: TextStyle(fontSize: 12)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.textSecondary,
+                              side: const BorderSide(
+                                  color: AppTheme.borderColor),
+                              padding: const EdgeInsets.symmetric(
+                                  vertical: 10),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(width: 32),
+
+                    // ── Right panel — info + character grid ──────
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+
+                          // Collection name
+                          _fieldLabel('Collection name'),
+                          const SizedBox(height: 6),
+                          Text(col.name,
+                              style: const TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary)),
+
+                          const SizedBox(height: 18),
+
+                          // Description
+                          _fieldLabel('Description'),
+                          const SizedBox(height: 6),
+                          col.description.isEmpty
+                              ? const Text('No description',
+                                  style: TextStyle(
+                                      color: AppTheme.textSecondary,
+                                      fontSize: 13))
+                              : Text(col.description,
+                                  style: const TextStyle(
+                                      color: AppTheme.textPrimary,
+                                      fontSize: 13,
+                                      height: 1.5)),
+
+                          const SizedBox(height: 24),
+                          const Divider(
+                              color: AppTheme.borderColor, height: 1),
+                          const SizedBox(height: 16),
+
+                          // ── Character list header ───────────────
+                          Row(
+                            children: [
+                              Text(
+                                'Characters',
+                                style: const TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500),
+                              ),
+                              const SizedBox(width: 6),
+                              if (chars.isNotEmpty)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.bgSurface,
+                                    borderRadius:
+                                        BorderRadius.circular(8),
+                                  ),
+                                  child: Text('${chars.length}',
+                                      style: const TextStyle(
+                                          color: AppTheme.textSecondary,
+                                          fontSize: 10)),
+                                ),
+                              const Spacer(),
+                              // Add characters button
+                              GestureDetector(
+                                onTap: () => _showAddCharactersDialog(
+                                    context, provider),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: accentCol.withOpacity(0.1),
+                                    borderRadius:
+                                        BorderRadius.circular(7),
+                                    border: Border.all(
+                                        color:
+                                            accentCol.withOpacity(0.4)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.person_add_outlined,
+                                          size: 13, color: accentCol),
+                                      const SizedBox(width: 5),
+                                      Text('Add characters',
+                                          style: TextStyle(
+                                              color: accentCol,
+                                              fontSize: 12)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+
+                          // ── Character grid ───────────────────────
+                          chars.isEmpty
+                              ? Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(
+                                      vertical: 40),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.bgSurface,
+                                    borderRadius:
+                                        BorderRadius.circular(10),
+                                    border: Border.all(
+                                        color: AppTheme.borderColor),
+                                  ),
+                                  child: Column(
+                                    children: [
+                                      Icon(
+                                        _search.isNotEmpty
+                                            ? Icons.search_off_rounded
+                                            : Icons
+                                                .folder_open_outlined,
+                                        size: 44,
+                                        color: AppTheme.textSecondary
+                                            .withOpacity(0.25),
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        _search.isNotEmpty
+                                            ? 'No results for "$_search"'
+                                            : 'No characters yet',
+                                        style: const TextStyle(
+                                            color:
+                                                AppTheme.textSecondary,
+                                            fontSize: 14),
+                                      ),
+                                      if (_search.isEmpty) ...[
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          'Tap Add characters to get started',
+                                          style: TextStyle(
+                                              color: accentCol
+                                                  .withOpacity(0.6),
+                                              fontSize: 12),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                )
+                              : GridView.builder(
+                                  shrinkWrap: true,
+                                  physics:
+                                      const NeverScrollableScrollPhysics(),
+                                  gridDelegate:
+                                      SliverGridDelegateWithMaxCrossAxisExtent(
+                                    maxCrossAxisExtent:
+                                        _sizeExtents[_cardSize],
+                                    childAspectRatio:
+                                        _aspectRatios[_cardSize],
+                                    crossAxisSpacing: 10,
+                                    mainAxisSpacing: 10,
+                                  ),
+                                  itemCount: chars.length,
+                                  itemBuilder: (context, index) {
+                                    final c = chars[index];
+                                    return CharacterCard(
+                                      character: c,
+                                      cardSize: _cardSize,
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                CharacterDetailScreen(
+                                                    character: c)),
+                                      ),
+                                    );
+                                  },
+                                ),
                         ],
                       ),
-                    )
-                  : GridView.builder(
-                      padding: const EdgeInsets.all(16),
-                      gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 200,
-                        childAspectRatio: 0.68,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                      ),
-                      itemCount: chars.length,
-                      itemBuilder: (context, index) {
-                        final c = chars[index];
-                        return CharacterCard(
-                          character: c,
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                                builder: (_) =>
-                                    CharacterDetailScreen(character: c)),
-                          ),
-                        );
-                      },
                     ),
+                  ],
+                ),
+              ),
             ),
           ],
         );
       },
     );
+  }
+}
+
+// ── Add characters dialog ───────────────────────────────────
+
+class _AddCharactersDialog extends StatefulWidget {
+  final Collection collection;
+  final CharacterProvider provider;
+
+  const _AddCharactersDialog({
+    required this.collection,
+    required this.provider,
+  });
+
+  @override
+  State<_AddCharactersDialog> createState() =>
+      _AddCharactersDialogState();
+}
+
+class _AddCharactersDialogState extends State<_AddCharactersDialog> {
+  String _search = '';
+  final Set<String> _selected = {};
+  bool _saving = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = widget.provider;
+    final accentCol =
+        widget.collection.accentColor ?? AppTheme.accent;
+    final alreadyIn = provider
+        .getCharactersForCollection(widget.collection.id)
+        .map((c) => c.id)
+        .toSet();
+
+    // All characters NOT already in collection, filtered by search
+    final available = provider.allCharacters
+        .where((c) =>
+            !alreadyIn.contains(c.id) &&
+            (_search.isEmpty ||
+                c.name
+                    .toLowerCase()
+                    .contains(_search.toLowerCase())))
+        .toList();
+
+    return Dialog(
+      backgroundColor: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12)),
+      child: SizedBox(
+        width: 480,
+        height: 560,
+        child: Column(
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 12, 0),
+              child: Row(
+                children: [
+                  Icon(Icons.person_add_outlined,
+                      size: 16, color: accentCol),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Add to ${widget.collection.name}',
+                    style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close,
+                        size: 16,
+                        color: AppTheme.textSecondary),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Search bar
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: TextField(
+                autofocus: true,
+                onChanged: (v) => setState(() => _search = v),
+                style: const TextStyle(
+                    color: AppTheme.textPrimary, fontSize: 13),
+                decoration: InputDecoration(
+                  hintText: 'Search characters…',
+                  prefixIcon: const Icon(Icons.search_rounded,
+                      size: 14,
+                      color: AppTheme.textSecondary),
+                  suffixIcon: _search.isNotEmpty
+                      ? GestureDetector(
+                          onTap: () =>
+                              setState(() => _search = ''),
+                          child: const Icon(Icons.close,
+                              size: 13,
+                              color: AppTheme.textSecondary),
+                        )
+                      : null,
+                  contentPadding:
+                      const EdgeInsets.symmetric(vertical: 8),
+                  isDense: true,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Divider(height: 1, color: AppTheme.borderColor),
+
+            // Character list
+            Expanded(
+              child: available.isEmpty
+                  ? Center(
+                      child: Text(
+                        _search.isNotEmpty
+                            ? 'No characters match "$_search"'
+                            : 'All characters are already in this collection',
+                        style: const TextStyle(
+                            color: AppTheme.textSecondary,
+                            fontSize: 13),
+                        textAlign: TextAlign.center,
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      itemCount: available.length,
+                      itemBuilder: (ctx, i) {
+                        final c = available[i];
+                        final isSelected =
+                            _selected.contains(c.id);
+                        final raceColor =
+                            AppTheme.raceColor(c.race);
+
+                        return GestureDetector(
+                          onTap: () => setState(() {
+                            if (isSelected) {
+                              _selected.remove(c.id);
+                            } else {
+                              _selected.add(c.id);
+                            }
+                          }),
+                          child: AnimatedContainer(
+                            duration:
+                                const Duration(milliseconds: 120),
+                            margin:
+                                const EdgeInsets.only(bottom: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? accentCol.withOpacity(0.1)
+                                  : AppTheme.bgSurface,
+                              borderRadius:
+                                  BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isSelected
+                                    ? accentCol.withOpacity(0.5)
+                                    : AppTheme.borderColor,
+                                width: isSelected ? 1.5 : 1,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                // Thumbnail
+                                Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: raceColor
+                                        .withOpacity(0.1),
+                                    borderRadius:
+                                        BorderRadius.circular(6),
+                                    border: Border.all(
+                                        color: raceColor
+                                            .withOpacity(0.3)),
+                                  ),
+                                  child: c.thumbnailPath != null &&
+                                          File(c.thumbnailPath!)
+                                              .existsSync()
+                                      ? ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(
+                                                  5),
+                                          child: Image.file(
+                                              File(c.thumbnailPath!),
+                                              fit: BoxFit.cover),
+                                        )
+                                      : Icon(Icons.person_outline,
+                                          size: 16,
+                                          color: raceColor
+                                              .withOpacity(0.5)),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(c.name,
+                                          style: TextStyle(
+                                            color: isSelected
+                                                ? AppTheme.textPrimary
+                                                : AppTheme.textPrimary,
+                                            fontSize: 13,
+                                            fontWeight: isSelected
+                                                ? FontWeight.w500
+                                                : FontWeight.normal,
+                                          )),
+                                      Text(
+                                          '${c.race} · ${c.gender[0]}',
+                                          style: TextStyle(
+                                              color: raceColor,
+                                              fontSize: 10)),
+                                    ],
+                                  ),
+                                ),
+                                // Checkbox
+                                AnimatedContainer(
+                                  duration: const Duration(
+                                      milliseconds: 120),
+                                  width: 18,
+                                  height: 18,
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? accentCol
+                                        : Colors.transparent,
+                                    borderRadius:
+                                        BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? accentCol
+                                          : AppTheme.borderColor,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: isSelected
+                                      ? const Icon(Icons.check,
+                                          size: 12,
+                                          color: Colors.white)
+                                      : null,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+
+            const Divider(height: 1, color: AppTheme.borderColor),
+
+            // Footer
+            Padding(
+              padding:
+                  const EdgeInsets.fromLTRB(16, 10, 16, 14),
+              child: Row(
+                children: [
+                  if (_selected.isNotEmpty)
+                    Text(
+                      '${_selected.length} selected',
+                      style: TextStyle(
+                          color: accentCol, fontSize: 12),
+                    )
+                  else
+                    const Text(
+                      'Tap characters to select',
+                      style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 12),
+                    ),
+                  const Spacer(),
+                  OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(
+                          color: AppTheme.borderColor),
+                      foregroundColor: AppTheme.textSecondary,
+                    ),
+                    child: const Text('Cancel'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton.icon(
+                    onPressed: _selected.isEmpty || _saving
+                        ? null
+                        : () => _addSelected(provider),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: accentCol,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: _saving
+                        ? const SizedBox(
+                            width: 13,
+                            height: 13,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white))
+                        : const Icon(Icons.add, size: 14),
+                    label: Text(
+                      _selected.isEmpty
+                          ? 'Add'
+                          : 'Add (${_selected.length})',
+                      style:
+                          const TextStyle(fontSize: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _addSelected(
+      CharacterProvider provider) async {
+    setState(() => _saving = true);
+    for (final id in _selected) {
+      final c = provider.allCharacters
+          .where((c) => c.id == id)
+          .firstOrNull;
+      if (c == null) continue;
+      if (!c.collectionIds.contains(widget.collection.id)) {
+        c.collectionIds = [
+          ...c.collectionIds,
+          widget.collection.id
+        ];
+        c.collectionId = c.collectionIds.first;
+        await provider.updateCharacter(c);
+      }
+    }
+    if (mounted) Navigator.pop(context);
   }
 }
 

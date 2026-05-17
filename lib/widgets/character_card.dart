@@ -9,15 +9,28 @@ import 'tag_chip.dart';
 class CharacterCard extends StatelessWidget {
   final Character character;
   final VoidCallback onTap;
+  final int cardSize; // 0=S,1=M,2=L,3=XL
 
-  const CharacterCard(
-      {super.key, required this.character, required this.onTap});
+  const CharacterCard({
+    super.key,
+    required this.character,
+    required this.onTap,
+    this.cardSize = 2,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Consumer<CharacterProvider>(
       builder: (context, provider, _) {
         final hasUpdate = provider.hasUpdate(character.id);
+        final tier = character.tier;
+        final tierColor = tier != null ? Color(tier.colorValue) : null;
+
+        // Border: tier colour > update amber > applied accent > default
+        final borderColor = hasUpdate
+            ? AppTheme.accentGold
+            : tierColor ?? (character.isApplied ? AppTheme.accent : AppTheme.borderColor);
+        final borderWidth = (hasUpdate || character.isApplied || tier != null) ? 1.5 : 1.0;
 
         return InkWell(
           onTap: onTap,
@@ -28,12 +41,8 @@ class CharacterCard extends StatelessWidget {
               color: AppTheme.bgCard,
               borderRadius: BorderRadius.circular(10),
               border: Border.all(
-                color: hasUpdate
-                    ? AppTheme.accentGold
-                    : character.isApplied
-                        ? AppTheme.accent
-                        : AppTheme.borderColor,
-                width: (hasUpdate || character.isApplied) ? 1.5 : 1,
+                color: borderColor,
+                width: borderWidth,
               ),
             ),
             child: Column(
@@ -61,6 +70,30 @@ class CharacterCard extends StatelessWidget {
                             ),
                           ),
                         ),
+                        // Tier badge — top left below race dot
+                        if (tier != null)
+                          Positioned(
+                            top: 20,
+                            left: 5,
+                            child: Container(
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: Color(tier.bgColorValue),
+                                borderRadius: BorderRadius.circular(5),
+                              ),
+                              child: Center(
+                                child: Text(
+                                  tier.label,
+                                  style: TextStyle(
+                                    color: Color(tier.colorValue),
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
                         // Favourite heart — bottom left
                         Positioned(
                           bottom: 5,
@@ -157,6 +190,7 @@ class CharacterCard extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
+                                // Name — always shown
                                 Text(
                                   character.name,
                                   style: const TextStyle(
@@ -167,15 +201,20 @@ class CharacterCard extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  '${character.race} · ${character.gender[0]}',
-                                  style: TextStyle(
-                                      color:
-                                          AppTheme.raceColor(character.race),
-                                      fontSize: 10),
-                                ),
-                                if (character.description.isNotEmpty) ...[
+                                // Race/gender — M, L, XL
+                                if (cardSize >= 1) ...[
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    '${character.race} · ${character.gender[0]}',
+                                    style: TextStyle(
+                                        color: AppTheme.raceColor(
+                                            character.race),
+                                        fontSize: 10),
+                                  ),
+                                ],
+                                // Description — XL only
+                                if (cardSize >= 3 &&
+                                    character.description.isNotEmpty) ...[
                                   const SizedBox(height: 2),
                                   Text(
                                     character.description,
@@ -193,12 +232,15 @@ class CharacterCard extends StatelessWidget {
                           _ApplyToggleButton(character: character),
                         ],
                       ),
-                      // Update row — shown below name when game folder has newer file
+                      // Update row
                       if (hasUpdate) ...[
                         const SizedBox(height: 6),
                         _UpdateRow(character: character),
                       ],
-                      if (character.tags.isNotEmpty && !hasUpdate) ...[
+                      // Tags — L and XL only
+                      if (cardSize >= 2 &&
+                          character.tags.isNotEmpty &&
+                          !hasUpdate) ...[
                         const SizedBox(height: 5),
                         Material(
                           type: MaterialType.transparency,

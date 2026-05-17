@@ -11,6 +11,7 @@ import '../providers/character_provider.dart';
 import '../services/hive_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/tag_chip.dart';
+import 'export_bundle_dialog.dart';
 import 'tags_screen.dart';
 
 class CharacterDetailScreen extends StatefulWidget {
@@ -197,10 +198,48 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
       appBar: AppBar(
         title: Text(_isEditing ? 'Editing: ${c.name}' : c.name),
         actions: [
-          IconButton(
+          // Share menu
+          PopupMenuButton<String>(
             icon: const Icon(Icons.ios_share_outlined),
-            tooltip: 'Export character file',
-            onPressed: _exportFile,
+            tooltip: 'Share / Export',
+            color: AppTheme.bgCard,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: const BorderSide(color: AppTheme.borderColor),
+            ),
+            onSelected: (value) async {
+              if (value == 'bundle') {
+                await showExportBundleDialog(context, c);
+              } else if (value == 'file') {
+                await _exportFile();
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem<String>(
+                value: 'bundle',
+                child: Row(
+                  children: [
+                    Icon(Icons.file_upload_outlined,
+                        size: 15, color: AppTheme.textSecondary),
+                    SizedBox(width: 8),
+                    Text('Export as .pso2char bundle',
+                        style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'file',
+                child: Row(
+                  children: [
+                    Icon(Icons.save_alt_rounded,
+                        size: 15, color: AppTheme.textSecondary),
+                    SizedBox(width: 8),
+                    Text('Export raw file only',
+                        style: TextStyle(fontSize: 13)),
+                  ],
+                ),
+              ),
+            ],
           ),
           if (!_isEditing)
             IconButton(
@@ -338,6 +377,9 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                     _badge(c.gender, AppTheme.accentGold),
                   ],
                 ),
+                const SizedBox(height: 10),
+                // ── Tier picker ──────────────────────────────
+                _TierPicker(character: c),
                 const SizedBox(height: 10),
                 // ── Apply toggle button on detail page ─────────
                 SizedBox(
@@ -676,6 +718,84 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
 
   String _formatDate(DateTime dt) =>
       '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+}
+
+// ── Tier picker widget ───────────────────────────────────
+
+class _TierPicker extends StatelessWidget {
+  final Character character;
+  const _TierPicker({required this.character});
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<CharacterProvider>();
+    final current = character.tier;
+
+    return SizedBox(
+      width: 240,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Text('Tier',
+                  style: TextStyle(
+                      color: AppTheme.textSecondary,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500)),
+              const Spacer(),
+              if (current != null)
+                GestureDetector(
+                  onTap: () => provider.setTier(character, null),
+                  child: const Text('Clear',
+                      style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: 10)),
+                ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: CharacterTier.values.map((t) {
+              final selected = current == t;
+              final borderColor = Color(t.colorValue);
+              final bgColor = Color(t.bgColorValue);
+              return GestureDetector(
+                onTap: () => provider.setTier(
+                    character, selected ? null : t),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 150),
+                  width: 40,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: selected ? bgColor : AppTheme.bgSurface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: selected ? borderColor : AppTheme.borderColor,
+                      width: selected ? 2 : 1,
+                    ),
+                  ),
+                  child: Center(
+                    child: Text(
+                      t.label,
+                      style: TextStyle(
+                        color: selected
+                            ? borderColor
+                            : AppTheme.textSecondary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Apply toggle button for detail page ───────────────────────────

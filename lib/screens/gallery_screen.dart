@@ -20,11 +20,52 @@ class _GalleryScreenState extends State<GalleryScreen> {
   String? _filterCharacterId;
   String _search = '';
   Set<String> _blurredItems = {};
+  int _sizeIndex = 3; // 0=S,1=M,2=L,3=XL
+
+  // maxCrossAxisExtent per size
+  static const List<double> _sizeExtents = [100, 160, 220, 300];
+  // info level: 0=none,1=name,2=name+filename,3=name+filename+date
+  static const List<int> _infoLevel = [0, 1, 2, 3];
+
+  IconData _gallerySizeIcon(int size) {
+    switch (size) {
+      case 0: return Icons.grid_on_rounded;
+      case 1: return Icons.grid_view_rounded;
+      case 2: return Icons.view_agenda_outlined;
+      case 3: return Icons.crop_free_rounded;
+      default: return Icons.grid_view_rounded;
+    }
+  }
+
+  PopupMenuItem<int> _gallerySizeItem(
+      int value, String label, IconData icon) {
+    final selected = _sizeIndex == value;
+    return PopupMenuItem<int>(
+      value: value,
+      child: Row(
+        children: [
+          Icon(icon,
+              size: 15,
+              color: selected ? AppTheme.accent : AppTheme.textSecondary),
+          const SizedBox(width: 10),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 13,
+                  color: selected ? AppTheme.accent : AppTheme.textPrimary)),
+          if (selected) ...[
+            const Spacer(),
+            Icon(Icons.check_rounded, size: 13, color: AppTheme.accent),
+          ],
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
     super.initState();
     _blurredItems = HiveService().getBlurredItems();
+    _sizeIndex = HiveService().getGallerySize();
   }
 
   Future<void> _toggleBlur(String itemId) async {
@@ -92,6 +133,35 @@ class _GalleryScreenState extends State<GalleryScreen> {
                         fontWeight: FontWeight.w500),
                   ),
                   const Spacer(),
+                  // Size picker dropdown
+                  PopupMenuButton<int>(
+                    color: AppTheme.bgCard,
+                    tooltip: 'Gallery size',
+                    icon: Icon(
+                      _gallerySizeIcon(_sizeIndex),
+                      size: 16,
+                      color: AppTheme.textSecondary,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: const BorderSide(color: AppTheme.borderColor),
+                    ),
+                    onSelected: (i) async {
+                      setState(() => _sizeIndex = i);
+                      await HiveService().saveGallerySize(i);
+                    },
+                    itemBuilder: (_) => [
+                      _gallerySizeItem(3, 'Extra large',
+                          Icons.crop_free_rounded),
+                      _gallerySizeItem(2, 'Large',
+                          Icons.view_agenda_outlined),
+                      _gallerySizeItem(1, 'Medium',
+                          Icons.grid_view_rounded),
+                      _gallerySizeItem(0, 'Small',
+                          Icons.grid_on_rounded),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
                   // Search bar
                   SizedBox(
                     width: 200,
@@ -170,11 +240,17 @@ class _GalleryScreenState extends State<GalleryScreen> {
                   : GridView.builder(
                       padding: const EdgeInsets.all(12),
                       gridDelegate:
-                          const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 180,
+                          SliverGridDelegateWithMaxCrossAxisExtent(
+                        maxCrossAxisExtent: _sizeExtents[_sizeIndex],
                         crossAxisSpacing: 8,
                         mainAxisSpacing: 8,
-                        childAspectRatio: 1,
+                        childAspectRatio: _infoLevel[_sizeIndex] == 0
+                            ? 1.0
+                            : _infoLevel[_sizeIndex] == 1
+                                ? 0.82
+                                : _infoLevel[_sizeIndex] == 2
+                                    ? 0.74
+                                    : 0.68,
                       ),
                       itemCount: items.length,
                       itemBuilder: (context, index) {
@@ -187,6 +263,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                           allItems: items,
                           index: index,
                           isBlurred: _blurredItems.contains(item.id),
+                          infoLevel: _infoLevel[_sizeIndex],
                           onToggleBlur: () => _toggleBlur(item.id),
                           onCharacterTap: char != null
                               ? () => Navigator.push(
@@ -353,6 +430,7 @@ class _GalleryGridCell extends StatefulWidget {
   final List<GalleryItem> allItems;
   final int index;
   final bool isBlurred;
+  final int infoLevel; // 0=none,1=name,2=name+filename,3=name+filename+date
   final VoidCallback onToggleBlur;
   final VoidCallback? onCharacterTap;
   final VoidCallback onDelete;
@@ -363,6 +441,7 @@ class _GalleryGridCell extends StatefulWidget {
     required this.allItems,
     required this.index,
     required this.isBlurred,
+    required this.infoLevel,
     required this.onToggleBlur,
     required this.onCharacterTap,
     required this.onDelete,
@@ -416,78 +495,74 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
                     ? AppTheme.accent.withOpacity(0.5)
                     : AppTheme.borderColor),
           ),
-          child: Stack(
-            fit: StackFit.expand,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Image (with optional blur)
-              ClipRRect(
-                borderRadius: BorderRadius.circular(7),
-                child: fileExists
-                    ? widget.isBlurred
-                        ? ImageFiltered(
-                            imageFilter:
-                                ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                            child: Image.file(
-                              File(widget.item.filePath),
-                              fit: BoxFit.cover,
-                              gaplessPlayback: true,
+              // ── Image area ──────────────────────────────────
+              Expanded(
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    ClipRRect(
+                      borderRadius: widget.infoLevel == 0
+                          ? BorderRadius.circular(7)
+                          : const BorderRadius.vertical(
+                              top: Radius.circular(7)),
+                      child: fileExists
+                          ? widget.isBlurred
+                              ? ImageFiltered(
+                                  imageFilter: ImageFilter.blur(
+                                      sigmaX: 18, sigmaY: 18),
+                                  child: Image.file(
+                                    File(widget.item.filePath),
+                                    fit: BoxFit.cover,
+                                    gaplessPlayback: true,
+                                  ),
+                                )
+                              : Image.file(
+                                  File(widget.item.filePath),
+                                  fit: BoxFit.cover,
+                                  gaplessPlayback: true,
+                                )
+                          : Center(
+                              child: Icon(Icons.broken_image_outlined,
+                                  size: 28,
+                                  color: AppTheme.textSecondary
+                                      .withOpacity(0.4)),
                             ),
-                          )
-                        : Image.file(
-                            File(widget.item.filePath),
-                            fit: BoxFit.cover,
-                            gaplessPlayback: true,
-                          )
-                    : Center(
-                        child: Icon(Icons.broken_image_outlined,
-                            size: 28,
-                            color: AppTheme.textSecondary
-                                .withOpacity(0.4)),
-                      ),
-              ),
-
-              // Blurred overlay icon
-              if (widget.isBlurred)
-                Center(
-                  child: Container(
-                    padding: const EdgeInsets.all(6),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.45),
-                      borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Icon(Icons.visibility_off_outlined,
-                        size: 18, color: Colors.white),
-                  ),
-                ),
 
-              // Character name badge — bottom
-              if (widget.character != null)
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: AnimatedOpacity(
-                    opacity: _hovered ? 1.0 : 0.0,
-                    duration: const Duration(milliseconds: 150),
-                    child: Container(
-                      padding: const EdgeInsets.fromLTRB(6, 4, 6, 5),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.65),
-                        borderRadius: const BorderRadius.vertical(
-                            bottom: Radius.circular(7)),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: raceColor,
-                              shape: BoxShape.circle,
-                            ),
+                    // Blurred overlay icon
+                    if (widget.isBlurred)
+                      Center(
+                        child: Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.45),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          const SizedBox(width: 4),
-                          Expanded(
+                          child: const Icon(Icons.visibility_off_outlined,
+                              size: 18, color: Colors.white),
+                        ),
+                      ),
+
+                    // Hover overlay name badge — only shown on S size (infoLevel 0)
+                    if (widget.infoLevel == 0 && widget.character != null)
+                      Positioned(
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        child: AnimatedOpacity(
+                          opacity: _hovered ? 1.0 : 0.0,
+                          duration: const Duration(milliseconds: 150),
+                          child: Container(
+                            padding:
+                                const EdgeInsets.fromLTRB(6, 4, 6, 5),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.65),
+                              borderRadius: const BorderRadius.vertical(
+                                  bottom: Radius.circular(7)),
+                            ),
                             child: Text(
                               widget.character!.name,
                               style: const TextStyle(
@@ -498,67 +573,136 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (widget.onCharacterTap != null)
-                            GestureDetector(
-                              onTap: widget.onCharacterTap,
-                              child: const Icon(
-                                  Icons.open_in_new_rounded,
-                                  size: 10,
-                                  color: Colors.white70),
-                            ),
-                        ],
+                        ),
                       ),
-                    ),
-                  ),
-                ),
 
-              // Hover controls
-              if (_hovered) ...[
-                // Blur toggle — top left
-                Positioned(
-                  top: 4,
-                  left: 4,
-                  child: GestureDetector(
-                    onTap: widget.onToggleBlur,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.65),
-                        borderRadius: BorderRadius.circular(5),
+                    // Hover controls
+                    if (_hovered) ...[
+                      Positioned(
+                        top: 4,
+                        left: 4,
+                        child: GestureDetector(
+                          onTap: widget.onToggleBlur,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.65),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Icon(
+                              widget.isBlurred
+                                  ? Icons.visibility_rounded
+                                  : Icons.visibility_off_outlined,
+                              size: 10,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
                       ),
-                      child: Icon(
-                        widget.isBlurred
-                            ? Icons.visibility_rounded
-                            : Icons.visibility_off_outlined,
-                        size: 10,
-                        color: Colors.white,
+                      Positioned(
+                        top: 4,
+                        right: 4,
+                        child: GestureDetector(
+                          onTap: widget.onDelete,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: Colors.red.withOpacity(0.85),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: const Icon(Icons.close,
+                                size: 10, color: Colors.white),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
+                  ],
+                ),
+              ),
+
+              // ── Info panel (M / L / XL only) ────────────────
+              if (widget.infoLevel >= 1)
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
+                  decoration: const BoxDecoration(
+                    color: AppTheme.bgCard,
+                    borderRadius: BorderRadius.vertical(
+                        bottom: Radius.circular(7)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Character name — M, L, XL
+                      if (widget.character != null)
+                        Row(
+                          children: [
+                            Container(
+                              width: 5,
+                              height: 5,
+                              decoration: BoxDecoration(
+                                color: raceColor,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                widget.character!.name,
+                                style: const TextStyle(
+                                    color: AppTheme.textPrimary,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w500),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            if (widget.onCharacterTap != null)
+                              GestureDetector(
+                                onTap: widget.onCharacterTap,
+                                child: const Icon(
+                                    Icons.open_in_new_rounded,
+                                    size: 9,
+                                    color: AppTheme.textSecondary),
+                              ),
+                          ],
+                        ),
+                      // Filename — L, XL
+                      if (widget.infoLevel >= 2) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.item.filePath.split(r'\').last.split('/').last,
+                          style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 9),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                      // Date added — XL only
+                      if (widget.infoLevel >= 3) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          'Added ${_formatDate(widget.item.addedAt)}',
+                          style: const TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 9),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-                // Delete — top right
-                Positioned(
-                  top: 4,
-                  right: 4,
-                  child: GestureDetector(
-                    onTap: widget.onDelete,
-                    child: Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.red.withOpacity(0.85),
-                        borderRadius: BorderRadius.circular(5),
-                      ),
-                      child: const Icon(Icons.close,
-                          size: 10, color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
       ),
     );
+  }
+
+  String _formatDate(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 }
 
