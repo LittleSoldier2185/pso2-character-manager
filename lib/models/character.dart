@@ -2,6 +2,48 @@ import 'package:hive/hive.dart';
 
 part 'character.g.dart';
 
+/// Tier rating for a character. Stored as nullable int in Hive.
+enum CharacterTier {
+  s, a, b, c, d;
+
+  String get label {
+    switch (this) {
+      case CharacterTier.s: return 'S';
+      case CharacterTier.a: return 'A';
+      case CharacterTier.b: return 'B';
+      case CharacterTier.c: return 'C';
+      case CharacterTier.d: return 'D';
+    }
+  }
+
+  /// Border/badge colour for this tier.
+  static const Map<CharacterTier, int> _colours = {
+    CharacterTier.s: 0xFFD85A30,
+    CharacterTier.a: 0xFFBA7517,
+    CharacterTier.b: 0xFF639922,
+    CharacterTier.c: 0xFF378ADD,
+    CharacterTier.d: 0xFF888780,
+  };
+
+  int get colorValue => _colours[this]!;
+
+  /// Badge background colour (lighter tint).
+  static const Map<CharacterTier, int> _bgColours = {
+    CharacterTier.s: 0xFFFAECE7,
+    CharacterTier.a: 0xFFFAC775,
+    CharacterTier.b: 0xFFC0DD97,
+    CharacterTier.c: 0xFFB5D4F4,
+    CharacterTier.d: 0xFFD3D1C7,
+  };
+
+  int get bgColorValue => _bgColours[this]!;
+
+  static CharacterTier? fromInt(int? value) {
+    if (value == null) return null;
+    return CharacterTier.values[value.clamp(0, 4)];
+  }
+}
+
 @HiveType(typeId: 0)
 class Character extends HiveObject {
   @HiveField(0)
@@ -59,6 +101,14 @@ class Character extends HiveObject {
   @HiveField(15)
   bool isFavourite;
 
+  /// Tier rating stored as nullable int (0=S,1=A,2=B,3=C,4=D, null=unrated).
+  @HiveField(16)
+  int? tierIndex;
+
+  /// Computed tier enum — null means unrated.
+  CharacterTier? get tier => CharacterTier.fromInt(tierIndex);
+  set tier(CharacterTier? t) => tierIndex = t?.index;
+
   Character({
     required this.id,
     required this.name,
@@ -76,6 +126,7 @@ class Character extends HiveObject {
     this.originalFileName,
     this.lastSyncedAt,
     this.isFavourite = false,
+    this.tierIndex,
   })  : tags = tags ?? [],
         collectionIds =
             collectionIds ?? (collectionId != null ? [collectionId!] : []),

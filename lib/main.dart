@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:desktop_drop/desktop_drop.dart';
 import 'package:provider/provider.dart';
 import 'providers/character_provider.dart';
 import 'screens/home_screen.dart';
@@ -8,9 +9,11 @@ import 'screens/settings_screen.dart';
 import 'screens/add_character_screen.dart';
 import 'screens/character_detail_screen.dart';
 import 'screens/gallery_screen.dart';
+import 'screens/import_bundle_dialog.dart';
 import 'screens/scan_screen.dart';
 import 'screens/tags_screen.dart';
 import 'services/hive_service.dart';
+import 'services/share_service.dart';
 import 'theme/app_theme.dart';
 import 'widgets/character_spinner.dart';
 
@@ -85,18 +88,31 @@ class _MainShellState extends State<MainShell> {
     ScanScreen(),
   ];
 
+  Future<void> _handleDroppedFiles(List<String> paths) async {
+    for (final path in paths) {
+      if (ShareService.isBundlePath(path)) {
+        await showImportBundleFromPath(context, path);
+        return; // handle one bundle at a time
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.bgDark,
-      body: Row(
-        children: [
-          _Sidebar(
-            currentIndex: _currentIndex,
-            onSelect: (i) => setState(() => _currentIndex = i),
-          ),
-          Expanded(child: _screens[_currentIndex]),
-        ],
+      body: DropTarget(
+        onDragDone: (details) =>
+            _handleDroppedFiles(details.files.map((f) => f.path).toList()),
+        child: Row(
+          children: [
+            _Sidebar(
+              currentIndex: _currentIndex,
+              onSelect: (i) => setState(() => _currentIndex = i),
+            ),
+            Expanded(child: _screens[_currentIndex]),
+          ],
+        ),
       ),
     );
   }
@@ -171,7 +187,7 @@ class _SidebarState extends State<_Sidebar> {
                                 color: AppTheme.textPrimary,
                                 fontSize: 8,
                                 fontWeight: FontWeight.w500)),
-                        Text('v1.1.0',
+                        Text('v1.2.0',
                             style: TextStyle(
                                 color: AppTheme.textSecondary, fontSize: 10)),
                       ],

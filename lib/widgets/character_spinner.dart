@@ -36,7 +36,7 @@ const Duration _spinDuration = Duration(milliseconds: 3800);
 
 // ── Filter entry ───────────────────────────────────────────────────
 
-enum _FilterKind { name, race, gender, tag }
+enum _FilterKind { name, race, gender, tag, tier }
 
 class _FilterEntry {
   final String value;
@@ -57,6 +57,11 @@ class _FilterEntry {
       case _FilterKind.gender: return AppTheme.accentGold;
       case _FilterKind.tag:    return AppTheme.newmanColor;
       case _FilterKind.name:   return AppTheme.accent;
+      case _FilterKind.tier:
+        final t = CharacterTier.values.firstWhere(
+            (t) => t.label == value,
+            orElse: () => CharacterTier.s);
+        return Color(t.colorValue);
     }
   }
 
@@ -136,6 +141,8 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
       case _FilterKind.race:   return c.race == e.value;
       case _FilterKind.gender: return c.gender == e.value;
       case _FilterKind.tag:    return c.tags.contains(e.value);
+      case _FilterKind.tier:
+        return c.tier != null && c.tier!.label == e.value;
     }
   }
 
@@ -197,9 +204,10 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
   }
 
   void _reroll() {
-    setState(() { _done = false; _spinning = false; });
+    if (_spinning) return;
     _buildReel();
     if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
+    _spin();
   }
 
   // ── Filter helpers ─────────────────────────────────────────────
@@ -209,6 +217,12 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
     final q = query.toLowerCase();
     final results = <_FilterEntry>[];
 
+    // Tiers
+    for (final t in CharacterTier.values) {
+      if (t.label.toLowerCase().contains(q) || 'tier'.contains(q)) {
+        results.add(_FilterEntry(t.label, _FilterKind.tier));
+      }
+    }
     // Races
     for (final r in ['Human', 'Newman', 'Deuman', 'CAST']) {
       if (r.toLowerCase().contains(q)) {

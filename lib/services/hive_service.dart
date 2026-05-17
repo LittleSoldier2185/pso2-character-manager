@@ -18,6 +18,11 @@ class HiveService {
   static const String _keyAccentColor    = 'accentColor';
   static const String _keyGalleryColumns = 'galleryColumns';
   static const String _keyBlurredItems   = 'blurredGalleryItems';
+  static const String _keyGallerySize    = 'gallerySize';
+  static const String _keyCardSize       = 'cardSize';
+  static const String _keyPersistedFilter = 'persistedFilter';
+  static const String _keyPersistFilter   = 'persistFilterEnabled';
+  static const String _keySavedPresets    = 'savedFilterPresets';
 
   static Future<void> init() async {
     await Hive.initFlutter();
@@ -229,6 +234,38 @@ class HiveService {
       (_settings.get(_keyGalleryColumns) as int?) ?? 3;
   Future<void> saveGalleryColumns(int columns) async =>
       _settings.put(_keyGalleryColumns, columns);
+
+  /// Gallery size: 0=S, 1=M, 2=L, 3=XL (default XL = 3)
+  int getGallerySize() =>
+      (_settings.get(_keyGallerySize) as int?) ?? 3;
+  Future<void> saveGallerySize(int size) async =>
+      _settings.put(_keyGallerySize, size);
+
+  /// Card size: 0=S, 1=M, 2=L, 3=XL (default L = 2)
+  int getCardSize() =>
+      (_settings.get(_keyCardSize) as int?) ?? 2;
+  Future<void> saveCardSize(int size) async =>
+      _settings.put(_keyCardSize, size);
+
+  /// Whether to persist the active filter across sessions.
+  bool getPersistFilter() =>
+      (_settings.get(_keyPersistFilter) as bool?) ?? false;
+  Future<void> savePersistFilter(bool value) async =>
+      _settings.put(_keyPersistFilter, value);
+
+  /// Persisted filter state as a JSON-encoded map.
+  String? getPersistedFilter() =>
+      _settings.get(_keyPersistedFilter) as String?;
+  Future<void> savePersistedFilter(String? json) async =>
+      json != null
+          ? _settings.put(_keyPersistedFilter, json)
+          : _settings.delete(_keyPersistedFilter);
+
+  /// Saved filter presets as a JSON-encoded list.
+  String? getSavedPresets() =>
+      _settings.get(_keySavedPresets) as String?;
+  Future<void> saveSavedPresets(String json) async =>
+      _settings.put(_keySavedPresets, json);
 
   /// Returns the set of gallery item IDs that are blurred.
   Set<String> getBlurredItems() {

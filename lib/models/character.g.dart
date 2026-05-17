@@ -41,13 +41,14 @@ class CharacterAdapter extends TypeAdapter<Character> {
       originalFileName: fields[13] == null ? null : fields[13] as String?,
       lastSyncedAt: fields[14] == null ? null : fields[14] as DateTime?,
       isFavourite: fields[15] == null ? false : fields[15] as bool,
+      tierIndex: fields[16] == null ? null : fields[16] as int?,
     );
   }
 
   @override
   void write(BinaryWriter writer, Character obj) {
     writer
-      ..writeByte(16)
+      ..writeByte(17)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -79,7 +80,9 @@ class CharacterAdapter extends TypeAdapter<Character> {
       ..writeByte(14)
       ..write(obj.lastSyncedAt)
       ..writeByte(15)
-      ..write(obj.isFavourite);
+      ..write(obj.isFavourite)
+      ..writeByte(16)
+      ..write(obj.tierIndex);
   }
 
   @override

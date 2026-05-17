@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -8,7 +10,58 @@ import '../models/gallery_item.dart';
 import '../models/tag.dart';
 import '../services/hive_service.dart';
 import '../services/file_service.dart';
+import '../services/share_service.dart';
 import '../services/storage_service.dart';
+
+// ── Filter preset model ───────────────────────────────────────────
+
+class FilterPreset {
+  final String id;
+  final String name;
+  final int colorValue;
+  final List<String> tokens;
+  final String? race;
+  final String? gender;
+  final bool? applied;
+  final List<String> tagIds;
+  final List<int> tierIndices;
+
+  const FilterPreset({
+    required this.id,
+    required this.name,
+    required this.colorValue,
+    this.tokens = const [],
+    this.race,
+    this.gender,
+    this.applied,
+    this.tagIds = const [],
+    this.tierIndices = const [],
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'colorValue': colorValue,
+    'tokens': tokens,
+    'race': race,
+    'gender': gender,
+    'applied': applied,
+    'tagIds': tagIds,
+    'tierIndices': tierIndices,
+  };
+
+  factory FilterPreset.fromJson(Map<String, dynamic> j) => FilterPreset(
+    id: j['id'] as String,
+    name: j['name'] as String,
+    colorValue: j['colorValue'] as int,
+    tokens: (j['tokens'] as List?)?.cast<String>() ?? [],
+    race: j['race'] as String?,
+    gender: j['gender'] as String?,
+    applied: j['applied'] as bool?,
+    tagIds: (j['tagIds'] as List?)?.cast<String>() ?? [],
+    tierIndices: (j['tierIndices'] as List?)?.cast<int>() ?? [],
+  );
+}
 
 enum SortOption {
   nameAZ,
@@ -16,26 +69,29 @@ enum SortOption {
   newestFirst,
   oldestFirst,
   lastApplied,
+  tierHighest,
 }
 
 extension SortOptionLabel on SortOption {
   String get label {
     switch (this) {
-      case SortOption.nameAZ:    return 'Name A → Z';
-      case SortOption.nameZA:    return 'Name Z → A';
-      case SortOption.newestFirst: return 'Newest first';
-      case SortOption.oldestFirst: return 'Oldest first';
-      case SortOption.lastApplied: return 'Last applied';
+      case SortOption.nameAZ:      return 'Name A → Z';
+      case SortOption.nameZA:      return 'Name Z → A';
+      case SortOption.newestFirst:  return 'Newest first';
+      case SortOption.oldestFirst:  return 'Oldest first';
+      case SortOption.lastApplied:  return 'Last applied';
+      case SortOption.tierHighest:  return 'Tier (S first)';
     }
   }
 
   IconData get icon {
     switch (this) {
-      case SortOption.nameAZ:    return Icons.sort_by_alpha_rounded;
-      case SortOption.nameZA:    return Icons.sort_by_alpha_rounded;
-      case SortOption.newestFirst: return Icons.schedule_rounded;
-      case SortOption.oldestFirst: return Icons.history_rounded;
-      case SortOption.lastApplied: return Icons.check_circle_outline_rounded;
+      case SortOption.nameAZ:      return Icons.sort_by_alpha_rounded;
+      case SortOption.nameZA:      return Icons.sort_by_alpha_rounded;
+      case SortOption.newestFirst:  return Icons.schedule_rounded;
+      case SortOption.oldestFirst:  return Icons.history_rounded;
+      case SortOption.lastApplied:  return Icons.check_circle_outline_rounded;
+      case SortOption.tierHighest:  return Icons.military_tech_rounded;
     }
   }
 }
@@ -51,6 +107,7 @@ class CharacterProvider extends ChangeNotifier {
   // Characters that have a newer file in the game folder
   // key = character id, value = game folder file's modified time
   final Map<String, DateTime> _pendingUpdates = {};
+  Timer? _syncTimer;
 
   List<String> _pendingTokens = [];
   List<String> _appliedTokens = [];
@@ -58,9 +115,16 @@ class CharacterProvider extends ChangeNotifier {
   String? _filterGender;
   String? _filterCollectionId;
   bool? _filterApplied;
-  List<String> _filterTags = [];
+  List<String> _filterTags = [];         // whitelist tag IDs
+  List<String> _filterTagsBlacklist = []; // blacklist tag IDs
+  Set<CharacterTier> _filterTiers = {};
   SortOption _sortOption = SortOption.newestFirst;
   bool _favouritesOnTop = true;
+
+  // Saved presets and persist setting
+  List<FilterPreset> _savedPresets = [];
+  bool _matchAll = true; // true = AND, false = OR — applies to tag filter
+  bool _persistFilter = false;
 
   String? _gameFolderPath;
   String? _saveLocation;
@@ -83,8 +147,13 @@ class CharacterProvider extends ChangeNotifier {
   String? get filterCollectionId => _filterCollectionId;
   bool? get filterApplied => _filterApplied;
   List<String> get filterTags => _filterTags;
+  List<String> get filterTagsBlacklist => _filterTagsBlacklist;
+  Set<CharacterTier> get filterTiers => _filterTiers;
   SortOption get sortOption => _sortOption;
   bool get favouritesOnTop => _favouritesOnTop;
+  List<FilterPreset> get savedPresets => _savedPresets;
+  bool get persistFilter => _persistFilter;
+  bool get matchAll => _matchAll;
   String? get gameFolderPath => _gameFolderPath;
   String? get saveLocation => _saveLocation;
 
@@ -111,27 +180,38 @@ class CharacterProvider extends ChangeNotifier {
   List<Character> get filteredCharacters {
     var list = _characters.where((c) {
       if (_appliedTokens.isNotEmpty) {
-        final matchesAll = _appliedTokens.every((token) {
-          final t = token.toLowerCase();
-          // Resolve tag UUIDs to names for comparison
-          final tagNames = c.tags
-              .map((id) => tagById(id)?.name.toLowerCase() ?? '')
-              .toList();
-          return c.name.toLowerCase().contains(t) ||
-              tagNames.any((name) => name.contains(t)) ||
-              c.description.toLowerCase().contains(t) ||
-              c.race.toLowerCase().contains(t);
-        });
-        if (!matchesAll) return false;
+        if (_matchAll) {
+          // AND — character must match every token by name
+          final matchesAll = _appliedTokens.every(
+              (token) => c.name.toLowerCase().contains(token.toLowerCase()));
+          if (!matchesAll) return false;
+        } else {
+          // OR — character must match at least one token by name
+          final matchesAny = _appliedTokens.any(
+              (token) => c.name.toLowerCase().contains(token.toLowerCase()));
+          if (!matchesAny) return false;
+        }
       }
       if (_filterRace != null && c.race != _filterRace) return false;
       if (_filterGender != null && c.gender != _filterGender) return false;
       if (_filterCollectionId != null &&
           !c.collectionIds.contains(_filterCollectionId)) return false;
       if (_filterApplied != null && c.isApplied != _filterApplied) return false;
-      // Tag filter — character must have ALL selected tag IDs
+      // Tag whitelist — AND: must have all, OR: must have at least one
       if (_filterTags.isNotEmpty) {
-        if (!_filterTags.every((id) => c.tags.contains(id))) return false;
+        if (_matchAll) {
+          if (!_filterTags.every((id) => c.tags.contains(id))) return false;
+        } else {
+          if (!_filterTags.any((id) => c.tags.contains(id))) return false;
+        }
+      }
+      // Tag blacklist — character must NOT have any of these tags
+      if (_filterTagsBlacklist.isNotEmpty) {
+        if (_filterTagsBlacklist.any((id) => c.tags.contains(id))) return false;
+      }
+      // Tier filter — character must match one of the selected tiers
+      if (_filterTiers.isNotEmpty) {
+        if (c.tier == null || !_filterTiers.contains(c.tier)) return false;
       }
       return true;
     }).toList();
@@ -144,7 +224,9 @@ class CharacterProvider extends ChangeNotifier {
       _filterGender != null ||
       _filterCollectionId != null ||
       _filterApplied != null ||
-      _filterTags.isNotEmpty;
+      _filterTags.isNotEmpty ||
+      _filterTagsBlacklist.isNotEmpty ||
+      _filterTiers.isNotEmpty;
 
   int get activeFilterCount {
     int n = 0;
@@ -154,6 +236,8 @@ class CharacterProvider extends ChangeNotifier {
     if (_filterCollectionId != null) n++;
     if (_filterApplied != null) n++;
     if (_filterTags.isNotEmpty) n += _filterTags.length;
+    if (_filterTagsBlacklist.isNotEmpty) n += _filterTagsBlacklist.length;
+    if (_filterTiers.isNotEmpty) n += _filterTiers.length;
     return n;
   }
 
@@ -178,6 +262,12 @@ class CharacterProvider extends ChangeNotifier {
           if (a.isApplied && b.isApplied) {
             return (a.slotNumber ?? 999).compareTo(b.slotNumber ?? 999);
           }
+          return b.createdAt.compareTo(a.createdAt);
+        case SortOption.tierHighest:
+          // S=0 is highest, null=unrated sorts last
+          final at = a.tierIndex ?? 999;
+          final bt = b.tierIndex ?? 999;
+          if (at != bt) return at.compareTo(bt);
           return b.createdAt.compareTo(a.createdAt);
       }
     }
@@ -217,8 +307,13 @@ class CharacterProvider extends ChangeNotifier {
     _gameFolderPath = _hive.getGameFolderPath();
     _saveLocation = _hive.getSaveLocation();
     StorageService.init(_saveLocation);
+    // Load persist settings
+    _persistFilter = _hive.getPersistFilter();
+    _loadSavedPresets();
+    if (_persistFilter) _restorePersistedFilter();
     notifyListeners();
     _checkForGameFolderUpdates();
+    _startSyncTimer();
   }
 
   void loadAll() {
@@ -366,6 +461,13 @@ class CharacterProvider extends ChangeNotifier {
 
   Future<void> toggleFavourite(Character character) async {
     character.isFavourite = !character.isFavourite;
+    await character.save();
+    _characters = _hive.getAllCharacters();
+    notifyListeners();
+  }
+
+  Future<void> setTier(Character character, CharacterTier? tier) async {
+    character.tier = tier;
     await character.save();
     _characters = _hive.getAllCharacters();
     notifyListeners();
@@ -563,7 +665,7 @@ class CharacterProvider extends ChangeNotifier {
     _pendingUpdates.clear();
     bool changed = false;
 
-    for (final char in _characters.where((c) => c.isApplied)) {
+    for (final char in _characters) {
       final updateTime = await FileService.checkForGameFolderUpdate(
         char.characterFilePath,
         _gameFolderPath!,
@@ -578,9 +680,24 @@ class CharacterProvider extends ChangeNotifier {
     if (changed) notifyListeners();
   }
 
+  /// Starts a periodic timer that rechecks the game folder every 30 seconds.
+  void _startSyncTimer() {
+    _syncTimer?.cancel();
+    _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      _checkForGameFolderUpdates();
+    });
+  }
+
   /// Manually trigger an update check (e.g. user pulls to refresh)
   Future<void> checkForUpdates() async {
     await _checkForGameFolderUpdates();
+    _startSyncTimer(); // reset the timer cycle after manual check
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    super.dispose();
   }
 
   /// Sync a character's file from the game folder back into the library.
@@ -620,6 +737,86 @@ class CharacterProvider extends ChangeNotifier {
       return null;
     } catch (e) {
       return 'Export failed: $e';
+    }
+  }
+
+  /// Export a character as a .pso2char bundle.
+  Future<String?> exportBundle({
+    required Character character,
+    required String destPath,
+    required ExportOptions options,
+  }) async {
+    final galleryItems = _hive.getGalleryItemsForCharacter(character.id);
+    return ShareService.exportBundle(
+      character: character,
+      galleryItems: galleryItems,
+      destPath: destPath,
+      options: options,
+    );
+  }
+
+  /// Estimate bundle size without writing to disk.
+  Future<int> estimateBundleSize({
+    required Character character,
+    required ExportOptions options,
+  }) async {
+    final galleryItems = _hive.getGalleryItemsForCharacter(character.id);
+    return ShareService.estimateBundleSize(
+      character: character,
+      galleryItems: galleryItems,
+      options: options,
+    );
+  }
+
+  /// Import a character from a .pso2char bundle.
+  Future<String?> importBundle({
+    required BundlePreview preview,
+    required String characterName,
+    String? customFileName,
+  }) async {
+    try {
+      final charsDir = await StorageService.charactersDir;
+      final thumbsDir = await StorageService.thumbnailsDir;
+      final galleryDir = await StorageService.galleryDir;
+
+      final result = await ShareService.extractBundle(
+        bundleBytes: preview.bundleBytes,
+        charactersDir: charsDir,
+        thumbnailsDir: thumbsDir,
+        galleryDir: galleryDir,
+        customFileName: customFileName,
+      );
+      if (result == null) return 'Failed to extract bundle';
+
+      final raceGender =
+          Character.detectRaceGender(result.characterFilePath);
+      final character = Character(
+        id: _uuid.v4(),
+        name: characterName,
+        race: raceGender['race']!,
+        gender: raceGender['gender']!,
+        characterFilePath: result.characterFilePath,
+        thumbnailPath: result.thumbnailPath,
+        originalFileName: result.originalFileName,
+        description: preview.description ?? '',
+        lastSyncedAt: DateTime.now(),
+      );
+      await _hive.addCharacter(character);
+
+      for (final path in result.galleryPaths) {
+        final item = GalleryItem(
+          id: _uuid.v4(),
+          characterId: character.id,
+          filePath: path,
+        );
+        await _hive.addGalleryItem(item);
+      }
+
+      _characters = _hive.getAllCharacters();
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return 'Import failed: $e';
     }
   }
 
@@ -668,9 +865,43 @@ class CharacterProvider extends ChangeNotifier {
       _characters.where((c) => c.collectionIds.contains(collectionId)).length;
 
   List<Character> getCharactersForCollection(String collectionId) =>
-      _sortedCharacters(_characters
+      _characters
           .where((c) => c.collectionIds.contains(collectionId))
-          .toList());
+          .toList();
+
+  List<Character> sortedCharactersForCollection(
+      String collectionId, SortOption option, bool favouritesOnTop) {
+    final list = _characters
+        .where((c) => c.collectionIds.contains(collectionId))
+        .toList();
+    final sorted = List<Character>.from(list);
+    sorted.sort((a, b) {
+      if (favouritesOnTop) {
+        if (a.isFavourite && !b.isFavourite) return -1;
+        if (!a.isFavourite && b.isFavourite) return 1;
+      }
+      switch (option) {
+        case SortOption.nameAZ:
+          return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        case SortOption.nameZA:
+          return b.name.toLowerCase().compareTo(a.name.toLowerCase());
+        case SortOption.newestFirst:
+          return b.createdAt.compareTo(a.createdAt);
+        case SortOption.oldestFirst:
+          return a.createdAt.compareTo(b.createdAt);
+        case SortOption.lastApplied:
+          if (a.isApplied && !b.isApplied) return -1;
+          if (!a.isApplied && b.isApplied) return 1;
+          return b.createdAt.compareTo(a.createdAt);
+        case SortOption.tierHighest:
+          final at = a.tierIndex ?? 999;
+          final bt = b.tierIndex ?? 999;
+          if (at != bt) return at.compareTo(bt);
+          return b.createdAt.compareTo(a.createdAt);
+      }
+    });
+    return sorted;
+  }
 
   // ── Save location ──────────────────────────────────────────────
 
@@ -725,6 +956,7 @@ class CharacterProvider extends ChangeNotifier {
   void applySearch() {
     _appliedTokens = List.from(_pendingTokens);
     notifyListeners();
+    if (_persistFilter) _persistCurrentFilter();
   }
 
   void clearTokens() {
@@ -736,11 +968,13 @@ class CharacterProvider extends ChangeNotifier {
   void setFilterRace(String? race) {
     _filterRace = (_filterRace == race) ? null : race;
     notifyListeners();
+    if (_persistFilter) _persistCurrentFilter();
   }
 
   void setFilterGender(String? gender) {
     _filterGender = (_filterGender == gender) ? null : gender;
     notifyListeners();
+    if (_persistFilter) _persistCurrentFilter();
   }
 
   void setFilterCollection(String? collectionId) {
@@ -751,6 +985,7 @@ class CharacterProvider extends ChangeNotifier {
   void setFilterApplied(bool? value) {
     _filterApplied = (_filterApplied == value) ? null : value;
     notifyListeners();
+    if (_persistFilter) _persistCurrentFilter();
   }
 
   void toggleFilterTag(String tag) {
@@ -758,7 +993,39 @@ class CharacterProvider extends ChangeNotifier {
       _filterTags = _filterTags.where((t) => t != tag).toList();
     } else {
       _filterTags = [..._filterTags, tag];
+      // Remove from blacklist if added to whitelist
+      _filterTagsBlacklist =
+          _filterTagsBlacklist.where((t) => t != tag).toList();
     }
+    notifyListeners();
+    if (_persistFilter) _persistCurrentFilter();
+  }
+
+  void toggleFilterTagBlacklist(String tag) {
+    if (_filterTagsBlacklist.contains(tag)) {
+      _filterTagsBlacklist =
+          _filterTagsBlacklist.where((t) => t != tag).toList();
+    } else {
+      _filterTagsBlacklist = [..._filterTagsBlacklist, tag];
+      // Remove from whitelist if added to blacklist
+      _filterTags = _filterTags.where((t) => t != tag).toList();
+    }
+    notifyListeners();
+    if (_persistFilter) _persistCurrentFilter();
+  }
+
+  void toggleFilterTier(CharacterTier tier) {
+    if (_filterTiers.contains(tier)) {
+      _filterTiers = {..._filterTiers}..remove(tier);
+    } else {
+      _filterTiers = {..._filterTiers, tier};
+    }
+    notifyListeners();
+    if (_persistFilter) _persistCurrentFilter();
+  }
+
+  void setMatchAll(bool value) {
+    _matchAll = value;
     notifyListeners();
   }
 
@@ -775,6 +1042,105 @@ class CharacterProvider extends ChangeNotifier {
     _filterCollectionId = null;
     _filterApplied = null;
     _filterTags = [];
+    _filterTagsBlacklist = [];
+    _filterTiers = {};
+    notifyListeners();
+    if (_persistFilter) _hive.savePersistedFilter(null);
+  }
+
+  // ── Persist filter ─────────────────────────────────────
+
+  Future<void> setPersistFilter(bool value) async {
+    _persistFilter = value;
+    await _hive.savePersistFilter(value);
+    if (!value) await _hive.savePersistedFilter(null);
+    notifyListeners();
+  }
+
+  void _persistCurrentFilter() {
+    if (!_persistFilter) return;
+    final state = {
+      'tokens': _appliedTokens,
+      'race': _filterRace,
+      'gender': _filterGender,
+      'applied': _filterApplied,
+      'tagIds': _filterTags,
+      'tierIndices': _filterTiers.map((t) => t.index).toList(),
+    };
+    _hive.savePersistedFilter(jsonEncode(state));
+  }
+
+  void _restorePersistedFilter() {
+    final raw = _hive.getPersistedFilter();
+    if (raw == null) return;
+    try {
+      final j = jsonDecode(raw) as Map<String, dynamic>;
+      _appliedTokens = (j['tokens'] as List?)?.cast<String>() ?? [];
+      _pendingTokens = List.from(_appliedTokens);
+      _filterRace = j['race'] as String?;
+      _filterGender = j['gender'] as String?;
+      _filterApplied = j['applied'] as bool?;
+      _filterTags = (j['tagIds'] as List?)?.cast<String>() ?? [];
+      final ti = (j['tierIndices'] as List?)?.cast<int>() ?? [];
+      _filterTiers = ti.map((i) => CharacterTier.values[i]).toSet();
+    } catch (_) {}
+  }
+
+  // ── Saved presets ────────────────────────────────────────
+
+  void _loadSavedPresets() {
+    final raw = _hive.getSavedPresets();
+    if (raw == null) { _savedPresets = []; return; }
+    try {
+      final list = jsonDecode(raw) as List;
+      _savedPresets = list
+          .map((e) => FilterPreset.fromJson(e as Map<String, dynamic>))
+          .toList();
+    } catch (_) { _savedPresets = []; }
+  }
+
+  Future<void> _persistPresets() async {
+    await _hive.saveSavedPresets(
+        jsonEncode(_savedPresets.map((p) => p.toJson()).toList()));
+  }
+
+  /// Save current active filter as a named preset.
+  Future<void> saveCurrentAsPreset(String name, Color color) async {
+    final preset = FilterPreset(
+      id: const Uuid().v4(),
+      name: name,
+      colorValue: color.toARGB32(),
+      tokens: List.from(_appliedTokens),
+      race: _filterRace,
+      gender: _filterGender,
+      applied: _filterApplied,
+      tagIds: List.from(_filterTags),
+      tierIndices: _filterTiers.map((t) => t.index).toList(),
+    );
+    _savedPresets = [..._savedPresets, preset];
+    await _persistPresets();
+    notifyListeners();
+  }
+
+  /// Apply a saved preset as the active filter.
+  void applyPreset(FilterPreset preset) {
+    _appliedTokens = List.from(preset.tokens);
+    _pendingTokens = List.from(preset.tokens);
+    _filterRace = preset.race;
+    _filterGender = preset.gender;
+    _filterApplied = preset.applied;
+    _filterTags = List.from(preset.tagIds);
+    _filterTiers = preset.tierIndices
+        .map((i) => CharacterTier.values[i])
+        .toSet();
+    notifyListeners();
+    if (_persistFilter) _persistCurrentFilter();
+  }
+
+  /// Delete a saved preset by id.
+  Future<void> deletePreset(String id) async {
+    _savedPresets = _savedPresets.where((p) => p.id != id).toList();
+    await _persistPresets();
     notifyListeners();
   }
 
