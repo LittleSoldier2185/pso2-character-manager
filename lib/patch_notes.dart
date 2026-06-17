@@ -3,6 +3,16 @@ import 'services/app_update_service.dart';
 import 'theme/app_theme.dart';
 
 const kPatchNotes = '''
+v1.3.4 — In-app auto-update
+
+IMPROVEMENT
+• The app can now update itself. When a new version is detected, clicking
+  the update button downloads the release zip, extracts it, and restarts
+  the app automatically — no browser or manual install needed.
+  Falls back to opening the GitHub release page if no zip is attached.
+
+────────────────────────────────────────
+
 v1.3.3 — Migration backup
 
 IMPROVEMENT

@@ -24,7 +24,7 @@ import 'services/data_service.dart';
 import 'services/migration_service.dart';
 import 'services/share_service.dart';
 import 'theme/app_theme.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'services/app_updater.dart';
 import 'widgets/app_title_bar.dart';
 
 void main() async {
@@ -343,9 +343,7 @@ class _SidebarState extends State<_Sidebar> {
                                               fontSize: 10));
                                     }
                                     return GestureDetector(
-                                      onTap: () => launchUrl(
-                                          Uri.parse(update.url),
-                                          mode: LaunchMode.externalApplication),
+                                      onTap: () => AppUpdater.installWithProgress(context, update),
                                       child: Tooltip(
                                         message:
                                             'v${update.version} available — click to download',
