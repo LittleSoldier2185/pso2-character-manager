@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../main.dart';
 import '../patch_notes.dart';
 import '../providers/character_provider.dart';
 import '../services/app_update_service.dart';
+import '../services/app_updater.dart';
 import '../services/data_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_title_bar.dart';
@@ -178,11 +178,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ElevatedButton.icon(
                       onPressed: () {
                         Navigator.pop(context);
-                        launchUrl(Uri.parse(info.url),
-                            mode: LaunchMode.externalApplication);
+                        AppUpdater.installWithProgress(context, info);
                       },
                       icon: const Icon(Icons.download_rounded, size: 14),
-                      label: Text('Download v${info.version}'),
+                      label: Text('Update to v${info.version}'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppTheme.accentGold,
                         foregroundColor: AppTheme.bgDark,
