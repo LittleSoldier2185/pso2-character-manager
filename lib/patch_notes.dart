@@ -3,6 +3,20 @@ import 'services/app_update_service.dart';
 import 'theme/app_theme.dart';
 
 const kPatchNotes = '''
+v1.3.1 — Hotfix
+
+BUG FIX
+• Fixed data migration not working for users upgrading from v1.2.0.
+  The migration was searching for Hive database files in the wrong folder
+  and silently skipping all characters as a result. All your characters,
+  collections, tags, and gallery images will now migrate correctly.
+
+If you already ran v1.3.0 and your data appeared empty, delete the app data
+folder (Documents\\PSO2CharacterManager) and re-launch v1.3.1 — it will
+re-read the original v1.2.0 files and migrate them properly.
+
+────────────────────────────────────────
+
 MAJOR UPDATES
 
 • PSO2 Salon Limit Removed
