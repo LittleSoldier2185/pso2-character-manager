@@ -80,12 +80,61 @@ class MigrationService {
     return false;
   }
 
+  static Future<void> _backupHiveFiles(String docsPath, String backupDir) async {
+    for (final name in [_charactersBox, _collectionsBox, _galleryBox, _tagsBox, _settingsBox]) {
+      for (final ext in ['.hive', '.lock']) {
+        final src = File(p.join(docsPath, '$name$ext'));
+        if (await src.exists()) await src.copy(p.join(backupDir, '$name$ext'));
+      }
+    }
+  }
+
+  static Future<void> _backupDataFiles(
+    String backupDir,
+    Box<Character> characterBox,
+    Box<GalleryItem> galleryBox,
+  ) async {
+    final galleryMap = <String, List<GalleryItem>>{};
+    for (final item in galleryBox.values) {
+      galleryMap.putIfAbsent(item.characterId, () => []).add(item);
+    }
+
+    for (final char in characterBox.values) {
+      final safeName = char.name.replaceAll(RegExp(r'[<>:"/\\|?*\x00-\x1F]'), '_');
+      final charDir = p.join(backupDir, '${safeName}_${char.id}');
+      await Directory(charDir).create(recursive: true);
+
+      if (char.characterFilePath.isNotEmpty) {
+        final src = File(char.characterFilePath);
+        if (await src.exists()) await src.copy(p.join(charDir, p.basename(char.characterFilePath)));
+      }
+
+      if (char.thumbnailPath != null && char.thumbnailPath!.isNotEmpty) {
+        final src = File(char.thumbnailPath!);
+        if (await src.exists()) await src.copy(p.join(charDir, p.basename(char.thumbnailPath!)));
+      }
+
+      final items = galleryMap[char.id] ?? [];
+      if (items.isNotEmpty) {
+        final galleryDir = p.join(charDir, 'gallery');
+        await Directory(galleryDir).create(recursive: true);
+        for (final item in items) {
+          final src = File(item.filePath);
+          if (await src.exists()) await src.copy(p.join(galleryDir, p.basename(item.filePath)));
+        }
+      }
+    }
+  }
+
   /// Runs the full migration. Also initialises DataService as a side effect.
   static Future<MigrationResult> run({
     void Function(String message, int done, int total)? onProgress,
   }) async {
     final docs = await getApplicationDocumentsDirectory();
     final appRoot = p.join(docs.path, 'PSO2CharacterManager');
+    final backupDir = p.join(appRoot, 'hive_backup');
+    await Directory(backupDir).create(recursive: true);
+    await _backupHiveFiles(docs.path, backupDir);
 
     // Init Hive at the documents root — v1.2.0 called initFlutter() with no
     // path, so .hive files live in Documents/ directly, not PSO2CharacterManager/.
@@ -100,6 +149,9 @@ class MigrationService {
     final galleryBox    = await Hive.openBox<GalleryItem>(_galleryBox);
     final tagBox        = await Hive.openBox<Tag>(_tagsBox);
     final settingsBox   = await Hive.openBox(_settingsBox);
+
+    onProgress?.call('Backing up old data…', 0, 0);
+    await _backupDataFiles(backupDir, characterBox, galleryBox);
 
     // Read old settings and init DataService
     final saveLocation = settingsBox.get(_keySaveLocation) as String?;
