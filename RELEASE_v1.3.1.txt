@@ -1,0 +1,39 @@
+v1.3.1 — Hotfix for data migration
+
+This is a mandatory update for anyone upgrading from v1.2.0.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  BUG FIX
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Fixed data migration not working when upgrading from v1.2.0.
+
+The migration screen would appear and complete, but all characters, collections,
+tags, and gallery images were silently skipped — leaving the library empty.
+
+Root cause: v1.2.0 stored its database files directly in Documents/, but the
+migration was looking in Documents\PSO2CharacterManager\ instead. It found
+nothing and did nothing.
+
+This is now fixed. The migration correctly reads your v1.2.0 data and moves
+everything into the new format.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  IF YOU ALREADY INSTALLED v1.3.0
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If you ran v1.3.0 and your library appeared empty, follow these steps:
+
+  1. Close the app
+  2. Delete the folder: Documents\PSO2CharacterManager\
+  3. Install and launch v1.3.1
+  4. The migration will run again and correctly import all your data
+
+Your original v1.2.0 files are untouched — they are still in Documents\ and
+will be picked up by the migration.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  FRESH INSTALLS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+No action needed. Install and launch normally.
