@@ -22,7 +22,7 @@ class AppUpdateService {
       if (res.statusCode != 200) return null;
       final data = jsonDecode(res.body) as Map<String, dynamic>;
       final tag =
-          ((data['tag_name'] as String?) ?? '').replaceFirst('v', '');
+          ((data['tag_name'] as String?) ?? '').replaceFirst(RegExp(r'^[vV]'), '');
       if (!_isNewer(tag)) return null;
       return AppUpdateInfo(
         version: tag,
