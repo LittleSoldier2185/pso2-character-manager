@@ -87,8 +87,9 @@ class MigrationService {
     final docs = await getApplicationDocumentsDirectory();
     final appRoot = p.join(docs.path, 'PSO2CharacterManager');
 
-    // Init Hive
-    await Hive.initFlutter(appRoot);
+    // Init Hive at the documents root — v1.2.0 called initFlutter() with no
+    // path, so .hive files live in Documents/ directly, not PSO2CharacterManager/.
+    await Hive.initFlutter(docs.path);
     if (!Hive.isAdapterRegistered(0)) Hive.registerAdapter(CharacterAdapter());
     if (!Hive.isAdapterRegistered(1)) Hive.registerAdapter(CollectionAdapter());
     if (!Hive.isAdapterRegistered(2)) Hive.registerAdapter(GalleryItemAdapter());
