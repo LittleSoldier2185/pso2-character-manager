@@ -3,6 +3,16 @@ import 'services/app_update_service.dart';
 import 'theme/app_theme.dart';
 
 const kPatchNotes = '''
+v1.3.3 — Migration backup
+
+IMPROVEMENT
+• Migration now backs up all your old data before creating the new structure.
+  Hive database files, character data files, thumbnails, and gallery images
+  are saved to Documents\\PSO2CharacterManager\\hive_backup\ before anything
+  is moved or converted. You can delete this folder once migration looks good.
+
+────────────────────────────────────────
+
 v1.3.2 — Hotfix
 
 BUG FIXES
