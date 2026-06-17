@@ -3,6 +3,14 @@ import 'services/app_update_service.dart';
 import 'theme/app_theme.dart';
 
 const kPatchNotes = '''
+v1.3.2 — Hotfix
+
+BUG FIXES
+• Fixed "Check for updates" not detecting new versions when GitHub release
+  tags use a capital V (e.g. V1.3.1 instead of v1.3.1).
+
+────────────────────────────────────────
+
 v1.3.1 — Hotfix
 
 BUG FIX
