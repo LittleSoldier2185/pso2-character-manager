@@ -62,42 +62,4 @@ class StorageService {
     final stamp = DateTime.now().millisecondsSinceEpoch;
     return p.join(dir, '${name}_$stamp$ext');
   }
-
-  static Future<Map<String, String>> migrateFiles({
-    required String oldRoot,
-    required String newRoot,
-    required void Function(int done, int total) onProgress,
-  }) async {
-    final pathMap = <String, String>{};
-
-    final oldChars = Directory(p.join(oldRoot, 'characters'));
-    final oldThumbs = Directory(p.join(oldRoot, 'thumbnails'));
-
-    final newCharsDir = Directory(p.join(newRoot, 'characters'));
-    final newThumbsDir = Directory(p.join(newRoot, 'thumbnails'));
-    await newCharsDir.create(recursive: true);
-    await newThumbsDir.create(recursive: true);
-
-    final List<FileSystemEntity> allFiles = [];
-    if (await oldChars.exists()) allFiles.addAll(oldChars.listSync());
-    if (await oldThumbs.exists()) allFiles.addAll(oldThumbs.listSync());
-
-    int done = 0;
-    for (final entity in allFiles) {
-      if (entity is File) {
-        final isChar = entity.path.contains('characters');
-        final subDir = isChar ? 'characters' : 'thumbnails';
-        final fileName = p.basename(entity.path);
-        final newPath = p.join(newRoot, subDir, fileName);
-        try {
-          await entity.copy(newPath);
-          await entity.delete();
-          pathMap[entity.path] = newPath;
-        } catch (_) {}
-      }
-      done++;
-      onProgress(done, allFiles.length);
-    }
-    return pathMap;
-  }
 }

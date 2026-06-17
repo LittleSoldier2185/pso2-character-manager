@@ -2,22 +2,22 @@ import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/character.dart';
+import '../models/character_data.dart';
 import '../providers/character_provider.dart';
 import '../theme/app_theme.dart';
 
 /// Shows the CS:GO-style case-opening spinner and returns the picked character.
 /// Returns null if the user dismissed without clicking "View character".
-Future<Character?> showCharacterSpinner(
+Future<CharacterData?> showCharacterSpinner(
   BuildContext context,
-  List<Character> characters,
+  List<CharacterData> characters,
 ) async {
   if (characters.isEmpty) return null;
   if (characters.length == 1) return characters.first;
 
   final provider = context.read<CharacterProvider>();
 
-  return showDialog<Character>(
+  return showDialog<CharacterData>(
     context: context,
     barrierDismissible: false,
     barrierColor: Colors.black.withOpacity(0.75),
@@ -34,9 +34,23 @@ const double _cardStride  = _cardWidth + _cardSpacing;
 const int    _spinRepeats = 6;
 const Duration _spinDuration = Duration(milliseconds: 3800);
 
+// ── Spin entry (character + specific variant) ──────────────────────
+
+class _SpinEntry {
+  final CharacterData character;
+  final VariantData variant;
+
+  const _SpinEntry(this.character, this.variant);
+
+  bool get isMainVariant => variant.folderName == character.mainVariant;
+  String? get thumbnailPath =>
+      character.thumbnailForVariant(variant.folderName);
+  String get key => '${character.id}:${variant.folderName}';
+}
+
 // ── Filter entry ───────────────────────────────────────────────────
 
-enum _FilterKind { name, race, gender, tag, tier }
+enum _FilterKind { name, race, gender, tag, tier, variant }
 
 class _FilterEntry {
   final String value;
@@ -53,10 +67,11 @@ class _FilterEntry {
 
   Color color(BuildContext context) {
     switch (kind) {
-      case _FilterKind.race:   return AppTheme.raceColor(value);
-      case _FilterKind.gender: return AppTheme.accentGold;
-      case _FilterKind.tag:    return AppTheme.newmanColor;
-      case _FilterKind.name:   return AppTheme.accent;
+      case _FilterKind.race:    return AppTheme.raceColor(value);
+      case _FilterKind.gender:  return AppTheme.accentGold;
+      case _FilterKind.tag:     return AppTheme.newmanColor;
+      case _FilterKind.name:    return AppTheme.accent;
+      case _FilterKind.variant: return AppTheme.accentGold;
       case _FilterKind.tier:
         final t = CharacterTier.values.firstWhere(
             (t) => t.label == value,
@@ -65,14 +80,13 @@ class _FilterEntry {
     }
   }
 
-  // Display name — for tags this is the resolved tag name, not the UUID
   String get label => _label ?? value;
 }
 
 // ── Dialog shell ───────────────────────────────────────────────────
 
 class _SpinnerDialog extends StatefulWidget {
-  final List<Character> characters;
+  final List<CharacterData> characters;
   final CharacterProvider provider;
   const _SpinnerDialog({required this.characters, required this.provider});
 
@@ -86,9 +100,9 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
   late Animation<double>   _anim;
   late ScrollController    _scrollCtrl;
 
-  late List<Character> _reel;
-  late int             _winnerIndex;
-  late Character       _winner;
+  List<_SpinEntry> _reel       = [];
+  int              _winnerIndex = 0;
+  late _SpinEntry  _winner;
 
   bool _spinning  = false;
   bool _done      = false;
@@ -97,7 +111,8 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
   // Filter state
   final Set<_FilterEntry> _whitelist = {};
   final Set<_FilterEntry> _blacklist = {};
-  bool _showFilters = false;
+  bool _showFilters     = false;
+  bool _includeVariants = false;
 
   // Actual measured viewport width — set by LayoutBuilder
   double _reelViewportWidth = 560.0;
@@ -117,32 +132,74 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
     super.dispose();
   }
 
-  // ── Eligible characters after applying filters ─────────────────
+  // ── Eligible entries after applying filters ────────────────────
 
-  List<Character> get _eligible {
-    var list = widget.characters.where((c) {
-      // Blacklist: exclude if any entry matches
-      for (final e in _blacklist) {
-        if (_matches(c, e)) return false;
+  List<_SpinEntry> get _eligible {
+    final variantWhitelist =
+        _whitelist.where((e) => e.kind == _FilterKind.variant).toSet();
+    final nonVariantWhitelist =
+        _whitelist.where((e) => e.kind != _FilterKind.variant).toSet();
+
+    final forced     = <_SpinEntry>[];
+    final candidates = <_SpinEntry>[];
+
+    for (final char in widget.characters) {
+      for (final variant in char.variants) {
+        final entry   = _SpinEntry(char, variant);
+        final isMain  = variant.folderName == char.mainVariant;
+        final isForced = variantWhitelist.isNotEmpty &&
+            variantWhitelist.any((e) => _matchesEntry(entry, e));
+
+        if (isForced) {
+          forced.add(entry);
+        } else if (isMain || _includeVariants) {
+          candidates.add(entry);
+        }
       }
-      // Whitelist: if non-empty, character must match at least one entry
-      if (_whitelist.isNotEmpty) {
-        final ok = _whitelist.any((e) => _matches(c, e));
-        if (!ok) return false;
+    }
+
+    // Apply filters to base candidates
+    final filteredCandidates = candidates.where((entry) {
+      for (final e in _blacklist) {
+        if (_matchesEntry(entry, e)) return false;
+      }
+      if (nonVariantWhitelist.isNotEmpty) {
+        return nonVariantWhitelist.any((e) => _matchesEntry(entry, e));
       }
       return true;
     }).toList();
-    return list;
+
+    // Apply only blacklist to forced entries
+    final filteredForced = forced.where((entry) {
+      return !_blacklist.any((e) => _matchesEntry(entry, e));
+    }).toList();
+
+    // Combine, deduplicate by key
+    final seen   = <String>{};
+    final result = <_SpinEntry>[];
+    for (final e in [...filteredCandidates, ...filteredForced]) {
+      if (seen.add(e.key)) result.add(e);
+    }
+    return result;
   }
 
-  bool _matches(Character c, _FilterEntry e) {
-    switch (e.kind) {
-      case _FilterKind.name:   return c.name.toLowerCase() == e.value.toLowerCase();
-      case _FilterKind.race:   return c.race == e.value;
-      case _FilterKind.gender: return c.gender == e.value;
-      case _FilterKind.tag:    return c.tags.contains(e.value);
+  bool _matchesEntry(_SpinEntry entry, _FilterEntry filter) {
+    final c = entry.character;
+    switch (filter.kind) {
+      case _FilterKind.name:
+        return c.name.toLowerCase() == filter.value.toLowerCase();
+      case _FilterKind.race:
+        return c.race == filter.value;
+      case _FilterKind.gender:
+        return c.gender == filter.value;
+      case _FilterKind.tag:
+        return c.tags.contains(filter.value);
       case _FilterKind.tier:
-        return c.tier != null && c.tier!.label == e.value;
+        return c.tier != null && c.tier!.label == filter.value;
+      case _FilterKind.variant:
+        final parts = filter.value.split(':');
+        if (parts.length < 2) return false;
+        return c.id == parts[0] && entry.variant.folderName == parts[1];
     }
   }
 
@@ -155,9 +212,9 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
     final rng = Random();
     _winner = pool[rng.nextInt(pool.length)];
 
-    final List<Character> reel = [];
+    final List<_SpinEntry> reel = [];
     for (int i = 0; i < _spinRepeats; i++) {
-      final shuffled = List<Character>.from(pool)..shuffle(rng);
+      final shuffled = List<_SpinEntry>.from(pool)..shuffle(rng);
       reel.addAll(shuffled);
     }
     final tailLength = (pool.length * 0.6).round().clamp(3, 12);
@@ -178,11 +235,6 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
     if (_spinning || _eligible.isEmpty) return;
     setState(() { _spinning = true; _done = false; });
 
-    // Precise centring:
-    // Each card starts at: index * _cardStride (no padding offset)
-    // Card centre: index * _cardStride + _cardWidth / 2
-    // We want card centre == viewport centre
-    // → scrollOffset = cardCentre - viewportCentre
     final viewportCentre = _reelViewportWidth / 2;
     final cardCentre     = _winnerIndex * _cardStride + _cardWidth / 2;
     final targetOffset   = (cardCentre - viewportCentre).clamp(0.0, double.infinity);
@@ -235,12 +287,11 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
         results.add(_FilterEntry(g, _FilterKind.gender));
       }
     }
-    // Tags — resolve UUID → name via provider
+    // Tags
     final allTagIds = widget.characters.expand((c) => c.tags).toSet();
     for (final tagId in allTagIds) {
       final tag = widget.provider.tagById(tagId);
       if (tag != null && tag.name.toLowerCase().contains(q)) {
-        // Store tag ID as value (for matching), but display name as label
         results.add(_FilterEntry(tagId, _FilterKind.tag, label: tag.name));
       }
     }
@@ -250,6 +301,22 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
         results.add(_FilterEntry(c.name, _FilterKind.name));
       }
     }
+    // Variants — searched by "CharName · VariantName" or variant display name
+    final seenVariantKeys = <String>{};
+    for (final char in widget.characters) {
+      for (final variant in char.variants) {
+        final variantLabel = '${char.name} · ${variant.displayName}';
+        if (variant.displayName.toLowerCase().contains(q) ||
+            variantLabel.toLowerCase().contains(q)) {
+          final key = '${char.id}:${variant.folderName}';
+          if (seenVariantKeys.add(key)) {
+            results.add(
+                _FilterEntry(key, _FilterKind.variant, label: variantLabel));
+          }
+        }
+      }
+    }
+
     return results.take(8).toList();
   }
 
@@ -265,7 +332,6 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
         width: 600,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            // Cap the dialog height to the available screen height minus padding
             final maxHeight = MediaQuery.of(context).size.height - 48;
             return ConstrainedBox(
               constraints: BoxConstraints(maxHeight: maxHeight),
@@ -296,13 +362,15 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
                           horizontal: 10, vertical: 5),
                       decoration: BoxDecoration(
                         color: (_whitelist.isNotEmpty ||
-                                _blacklist.isNotEmpty)
+                                _blacklist.isNotEmpty ||
+                                _includeVariants)
                             ? AppTheme.accent.withOpacity(0.12)
                             : AppTheme.bgSurface,
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
                           color: (_whitelist.isNotEmpty ||
-                                  _blacklist.isNotEmpty)
+                                  _blacklist.isNotEmpty ||
+                                  _includeVariants)
                               ? AppTheme.accent
                               : AppTheme.borderColor,
                         ),
@@ -313,7 +381,8 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
                           Icon(Icons.tune_rounded,
                               size: 13,
                               color: (_whitelist.isNotEmpty ||
-                                      _blacklist.isNotEmpty)
+                                      _blacklist.isNotEmpty ||
+                                      _includeVariants)
                                   ? AppTheme.accent
                                   : AppTheme.textSecondary),
                           const SizedBox(width: 4),
@@ -321,7 +390,8 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
                               style: TextStyle(
                                   fontSize: 11,
                                   color: (_whitelist.isNotEmpty ||
-                                          _blacklist.isNotEmpty)
+                                          _blacklist.isNotEmpty ||
+                                          _includeVariants)
                                       ? AppTheme.accent
                                       : AppTheme.textSecondary)),
                           if (_whitelist.isNotEmpty ||
@@ -363,6 +433,11 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
                   blacklist: _blacklist,
                   suggestions: _suggestions,
                   eligibleCount: eligible.length,
+                  includeVariants: _includeVariants,
+                  onToggleVariants: () {
+                    setState(() => _includeVariants = !_includeVariants);
+                    if (!_spinning && !_done) _buildReel();
+                  },
                   onChanged: () {
                     setState(() {});
                     if (!_spinning && !_done) _buildReel();
@@ -397,7 +472,6 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
                     )
                   : LayoutBuilder(
                       builder: (context, constraints) {
-                        // Capture real viewport width for accurate centring
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           if (_reelViewportWidth != constraints.maxWidth) {
                             _reelViewportWidth = constraints.maxWidth;
@@ -425,15 +499,13 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
                                 scrollDirection: Axis.horizontal,
                                 physics:
                                     const NeverScrollableScrollPhysics(),
-                                // No horizontal padding — keeps maths clean
                                 padding: const EdgeInsets.symmetric(
                                     vertical: 8),
                                 itemCount: _reel.length,
                                 itemBuilder: (_, i) => Padding(
                                   padding: const EdgeInsets.only(
                                       right: _cardSpacing),
-                                  child:
-                                      _ReelCard(character: _reel[i]),
+                                  child: _ReelCard(entry: _reel[i]),
                                 ),
                               ),
                             ),
@@ -490,7 +562,7 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
                       winner: _winner,
                       onOpen: () {
                         _dismissed = true;
-                        Navigator.pop(context, _winner);
+                        Navigator.pop(context, _winner.character);
                       },
                       onReroll: _reroll,
                     )
@@ -524,7 +596,7 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
                               if (eligible.isNotEmpty) ...[
                                 const SizedBox(height: 6),
                                 Text(
-                                  '${eligible.length} character${eligible.length == 1 ? '' : 's'} eligible',
+                                  '${eligible.length} eligible to spin',
                                   style: const TextStyle(
                                       color: AppTheme.textSecondary,
                                       fontSize: 11),
@@ -552,6 +624,8 @@ class _FilterPanel extends StatefulWidget {
   final Set<_FilterEntry> blacklist;
   final List<_FilterEntry> Function(String) suggestions;
   final int eligibleCount;
+  final bool includeVariants;
+  final VoidCallback onToggleVariants;
   final VoidCallback onChanged;
 
   const _FilterPanel({
@@ -559,6 +633,8 @@ class _FilterPanel extends StatefulWidget {
     required this.blacklist,
     required this.suggestions,
     required this.eligibleCount,
+    required this.includeVariants,
+    required this.onToggleVariants,
     required this.onChanged,
   });
 
@@ -606,11 +682,55 @@ class _FilterPanelState extends State<_FilterPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ── Include variants toggle ──────────────────────
+          InkWell(
+            onTap: widget.onToggleVariants,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Icon(Icons.layers_outlined,
+                      size: 13,
+                      color: widget.includeVariants
+                          ? AppTheme.accent
+                          : AppTheme.textSecondary),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Include variants',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: widget.includeVariants
+                          ? AppTheme.accent
+                          : AppTheme.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '— each variant treated as a separate spin entry',
+                    style: TextStyle(
+                        fontSize: 10, color: AppTheme.textSecondary.withOpacity(0.6)),
+                  ),
+                  const Spacer(),
+                  Switch(
+                    value: widget.includeVariants,
+                    onChanged: (_) => widget.onToggleVariants(),
+                    activeColor: AppTheme.accent,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          const Divider(height: 1, color: AppTheme.borderColor),
+
           // Whitelist
           _FilterSection(
             label: 'Whitelist',
             labelColor: Colors.green,
-            hint: 'Include: name, race, gender, tag…',
+            hint: 'Include: name, race, gender, tag, variant…',
             icon: Icons.add_circle_outline_rounded,
             entries: widget.whitelist,
             suggestions: _whiteSuggestions,
@@ -631,7 +751,7 @@ class _FilterPanelState extends State<_FilterPanel> {
           _FilterSection(
             label: 'Blacklist',
             labelColor: Colors.redAccent,
-            hint: 'Exclude: name, race, gender, tag…',
+            hint: 'Exclude: name, race, gender, tag, variant…',
             icon: Icons.remove_circle_outline_rounded,
             entries: widget.blacklist,
             suggestions: _blackSuggestions,
@@ -671,8 +791,8 @@ class _FilterPanelState extends State<_FilterPanel> {
                 const SizedBox(width: 6),
                 Text(
                   widget.eligibleCount > 0
-                      ? '${widget.eligibleCount} character${widget.eligibleCount == 1 ? '' : 's'} eligible to spin'
-                      : 'No characters match — adjust your filters',
+                      ? '${widget.eligibleCount} eligible to spin'
+                      : 'No entries match — adjust your filters',
                   style: TextStyle(
                     fontSize: 11,
                     color: widget.eligibleCount > 0
@@ -907,14 +1027,15 @@ class _TickPainter extends CustomPainter {
 // ── Individual reel card ───────────────────────────────────────────
 
 class _ReelCard extends StatelessWidget {
-  final Character character;
-  const _ReelCard({required this.character});
+  final _SpinEntry entry;
+  const _ReelCard({required this.entry});
 
   @override
   Widget build(BuildContext context) {
-    final hasThumb = character.thumbnailPath != null &&
-        File(character.thumbnailPath!).existsSync();
-    final raceColor = AppTheme.raceColor(character.race);
+    final c        = entry.character;
+    final thumb    = entry.thumbnailPath;
+    final hasThumb = thumb != null && File(thumb).existsSync();
+    final raceColor = AppTheme.raceColor(c.race);
 
     return Container(
       width: _cardWidth,
@@ -931,7 +1052,7 @@ class _ReelCard extends StatelessWidget {
             Expanded(
               child: hasThumb
                   ? Image.file(
-                      File(character.thumbnailPath!),
+                      File(thumb),
                       fit: BoxFit.cover,
                       width: double.infinity,
                     )
@@ -953,7 +1074,7 @@ class _ReelCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    character.name,
+                    c.name,
                     style: const TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 10,
@@ -961,9 +1082,19 @@ class _ReelCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
+                  if (!entry.isMainVariant) ...[
+                    const SizedBox(height: 1),
+                    Text(
+                      entry.variant.displayName,
+                      style: const TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 8),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
                   const SizedBox(height: 1),
                   Text(
-                    '${character.race} · ${character.gender[0]}',
+                    '${c.race} · ${c.gender[0]}',
                     style: TextStyle(color: raceColor, fontSize: 9),
                   ),
                 ],
@@ -979,7 +1110,7 @@ class _ReelCard extends StatelessWidget {
 // ── Result panel ───────────────────────────────────────────────────
 
 class _ResultPanel extends StatelessWidget {
-  final Character winner;
+  final _SpinEntry winner;
   final VoidCallback onOpen;
   final VoidCallback onReroll;
 
@@ -992,6 +1123,7 @@ class _ResultPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final c = winner.character;
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
       child: Container(
@@ -1011,20 +1143,30 @@ class _ResultPanel extends StatelessWidget {
                     style: TextStyle(
                         color: AppTheme.textSecondary, fontSize: 11)),
                 const Spacer(),
-                Text('${winner.race} · ${winner.gender}',
+                Text('${c.race} · ${c.gender}',
                     style: TextStyle(
-                        color: AppTheme.raceColor(winner.race),
+                        color: AppTheme.raceColor(c.race),
                         fontSize: 11)),
               ],
             ),
             const SizedBox(height: 2),
-            Text(winner.name,
+            Text(c.name,
                 style: TextStyle(
                     color: AppTheme.accent,
                     fontSize: 16,
                     fontWeight: FontWeight.w600),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis),
+            if (!winner.isMainVariant) ...[
+              const SizedBox(height: 2),
+              Text(
+                winner.variant.displayName,
+                style: const TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 12),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
             const SizedBox(height: 10),
             Row(
               children: [

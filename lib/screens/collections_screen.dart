@@ -1,13 +1,14 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
-import '../models/collection.dart';
+import '../models/collection_data.dart';
 import '../providers/character_provider.dart';
-import '../services/file_service.dart';
-import '../services/hive_service.dart';
+import '../services/data_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/character_card.dart';
+import '../widgets/skeleton.dart';
 import '../widgets/tag_chip.dart';
 import 'character_detail_screen.dart';
 
@@ -42,7 +43,7 @@ class CollectionsScreen extends StatefulWidget {
 }
 
 class _CollectionsScreenState extends State<CollectionsScreen> {
-  Collection? _openCollection;
+  CollectionData? _openCollection;
 
   @override
   Widget build(BuildContext context) {
@@ -69,7 +70,7 @@ class _CollectionsScreenState extends State<CollectionsScreen> {
 }
 
 class _CollectionGridView extends StatefulWidget {
-  final ValueChanged<Collection> onOpen;
+  final ValueChanged<CollectionData> onOpen;
   const _CollectionGridView({required this.onOpen});
 
   @override
@@ -80,8 +81,8 @@ class _CollectionGridViewState extends State<_CollectionGridView> {
   String _search = '';
   CollectionSortOption _sortOption = CollectionSortOption.nameAZ;
 
-  List<Collection> _sorted(List<Collection> cols, CharacterProvider provider) {
-    final list = List<Collection>.from(cols);
+  List<CollectionData> _sorted(List<CollectionData> cols, CharacterProvider provider) {
+    final list = List<CollectionData>.from(cols);
     switch (_sortOption) {
       case CollectionSortOption.nameAZ:
         list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -236,7 +237,9 @@ class _CollectionGridViewState extends State<_CollectionGridView> {
               ),
             ),
             Expanded(
-              child: collections.isEmpty
+              child: provider.isLoading
+                  ? const SkeletonCollectionList()
+                  : collections.isEmpty
                   ? _buildEmpty(context)
                   : GridView.builder(
                       padding: const EdgeInsets.all(16),
@@ -293,8 +296,8 @@ class _CollectionGridViewState extends State<_CollectionGridView> {
 }
 
 class _CollectionCard extends StatelessWidget {
-  final Collection collection;
-  final ValueChanged<Collection> onOpen;
+  final CollectionData collection;
+  final ValueChanged<CollectionData> onOpen;
   const _CollectionCard({required this.collection, required this.onOpen});
 
   void _showEditDialog(BuildContext context) {
@@ -506,7 +509,7 @@ class _PreviewCell extends StatelessWidget {
 }
 
 class _CollectionDetailView extends StatefulWidget {
-  final Collection collection;
+  final CollectionData collection;
   final VoidCallback onBack;
   const _CollectionDetailView(
       {required this.collection, required this.onBack});
@@ -528,7 +531,12 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
   @override
   void initState() {
     super.initState();
-    _cardSize = HiveService().getCardSize();
+    _loadCardSize();
+  }
+
+  Future<void> _loadCardSize() async {
+    final size = await DataService.instance.getCardSize();
+    if (mounted) setState(() => _cardSize = size);
   }
 
   void _showEditDialog(BuildContext context) {
@@ -767,7 +775,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                     ),
                     onSelected: (i) async {
                       setState(() => _cardSize = i);
-                      await HiveService().saveCardSize(i);
+                      await DataService.instance.saveCardSize(i);
                     },
                     itemBuilder: (_) => [
                       _sizeMenuItem(3, 'Extra large',
@@ -988,26 +996,6 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                           ],
                         ),
 
-                        const SizedBox(height: 10),
-
-                        // Edit button
-                        SizedBox(
-                          width: 240,
-                          child: OutlinedButton.icon(
-                            onPressed: () => _showEditDialog(context),
-                            icon: const Icon(Icons.edit_outlined,
-                                size: 14),
-                            label: const Text('Edit collection',
-                                style: TextStyle(fontSize: 12)),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: AppTheme.textSecondary,
-                              side: const BorderSide(
-                                  color: AppTheme.borderColor),
-                              padding: const EdgeInsets.symmetric(
-                                  vertical: 10),
-                            ),
-                          ),
-                        ),
                       ],
                     ),
 
@@ -1075,6 +1063,34 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                                           fontSize: 10)),
                                 ),
                               const Spacer(),
+                              // Edit collection button
+                              GestureDetector(
+                                onTap: () => _showEditDialog(context),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: AppTheme.bgSurface,
+                                    borderRadius: BorderRadius.circular(7),
+                                    border: Border.all(
+                                        color: AppTheme.borderColor),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.edit_outlined,
+                                          size: 13,
+                                          color: AppTheme.textSecondary),
+                                      const SizedBox(width: 5),
+                                      const Text('Edit collection',
+                                          style: TextStyle(
+                                              color: AppTheme.textSecondary,
+                                              fontSize: 12)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
                               // Add characters button
                               GestureDetector(
                                 onTap: () => _showAddCharactersDialog(
@@ -1201,7 +1217,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
 // ── Add characters dialog ───────────────────────────────────
 
 class _AddCharactersDialog extends StatefulWidget {
-  final Collection collection;
+  final CollectionData collection;
   final CharacterProvider provider;
 
   const _AddCharactersDialog({
@@ -1526,7 +1542,6 @@ class _AddCharactersDialogState extends State<_AddCharactersDialog> {
           ...c.collectionIds,
           widget.collection.id
         ];
-        c.collectionId = c.collectionIds.first;
         await provider.updateCharacter(c);
       }
     }
@@ -1540,7 +1555,7 @@ enum _CollectionDialogMode { create, edit }
 
 class _CollectionDialog extends StatefulWidget {
   final _CollectionDialogMode mode;
-  final Collection? collection; // null when creating
+  final CollectionData? collection; // null when creating
   final Future<void> Function(
       String name, String desc, String? thumbPath, int? accentVal) onSave;
 
@@ -1626,8 +1641,12 @@ class _CollectionDialogState extends State<_CollectionDialog>
       } else {
         // Create mode — copy new thumbnail if picked
         if (_pickedThumb != null) {
-          finalThumbPath =
-              await FileService.copyThumbnailFile(_pickedThumb!);
+          final ext = p.extension(_pickedThumb!);
+          final dest = p.join(
+              p.dirname(_pickedThumb!),
+              '${DateTime.now().millisecondsSinceEpoch}$ext');
+          await File(_pickedThumb!).copy(dest);
+          finalThumbPath = dest;
         } else {
           finalThumbPath = null;
         }
@@ -2109,20 +2128,56 @@ class _CollectionDialogState extends State<_CollectionDialog>
 
 // ── Characters tab content ─────────────────────────────────────────
 
-class _CharactersTab extends StatelessWidget {
-  final Collection collection;
+class _CharactersTab extends StatefulWidget {
+  final CollectionData collection;
   const _CharactersTab({required this.collection});
+
+  @override
+  State<_CharactersTab> createState() => _CharactersTabState();
+}
+
+class _CharactersTabState extends State<_CharactersTab> {
+  String _search = '';
 
   @override
   Widget build(BuildContext context) {
     return Consumer<CharacterProvider>(
       builder: (context, provider, _) {
-        final chars =
-            provider.getCharactersForCollection(collection.id);
+        var chars = provider.getCharactersForCollection(widget.collection.id);
+        final hasAny = chars.isNotEmpty;
+        if (_search.isNotEmpty) {
+          chars = chars
+              .where((c) =>
+                  c.name.toLowerCase().contains(_search.toLowerCase()))
+              .toList();
+        }
         return Column(
           children: [
+            if (hasAny)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                child: TextField(
+                  onChanged: (v) => setState(() => _search = v),
+                  style: const TextStyle(
+                      color: AppTheme.textPrimary, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Search characters…',
+                    prefixIcon: const Icon(Icons.search_rounded,
+                        size: 14, color: AppTheme.textSecondary),
+                    suffixIcon: _search.isNotEmpty
+                        ? GestureDetector(
+                            onTap: () => setState(() => _search = ''),
+                            child: const Icon(Icons.close,
+                                size: 13, color: AppTheme.textSecondary),
+                          )
+                        : null,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                    isDense: true,
+                  ),
+                ),
+              ),
             Expanded(
-              child: chars.isEmpty
+              child: !hasAny
                   ? Center(
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -2144,64 +2199,68 @@ class _CharactersTab extends StatelessWidget {
                         ],
                       ),
                     )
-                  : ListView.builder(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 8),
-                      itemCount: chars.length,
-                      itemBuilder: (ctx, i) {
-                        final c = chars[i];
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 6),
+                  : chars.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No results for "$_search"',
+                            style: const TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 13),
+                          ),
+                        )
+                      : ListView.builder(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 8),
-                          decoration: BoxDecoration(
-                            color: AppTheme.bgSurface,
-                            borderRadius: BorderRadius.circular(8),
-                            border:
-                                Border.all(color: AppTheme.borderColor),
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 7,
-                                height: 7,
-                                decoration: BoxDecoration(
-                                  color: AppTheme.raceColor(c.race),
-                                  shape: BoxShape.circle,
-                                ),
+                              horizontal: 16, vertical: 8),
+                          itemCount: chars.length,
+                          itemBuilder: (ctx, i) {
+                            final c = chars[i];
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 6),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: AppTheme.bgSurface,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppTheme.borderColor),
                               ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(c.name,
-                                    style: const TextStyle(
-                                        color: AppTheme.textPrimary,
-                                        fontSize: 12)),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    width: 7,
+                                    height: 7,
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.raceColor(c.race),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(c.name,
+                                        style: const TextStyle(
+                                            color: AppTheme.textPrimary,
+                                            fontSize: 12)),
+                                  ),
+                                  Text('${c.race} · ${c.gender[0]}',
+                                      style: const TextStyle(
+                                          color: AppTheme.textSecondary,
+                                          fontSize: 10)),
+                                  const SizedBox(width: 8),
+                                  GestureDetector(
+                                    onTap: () async {
+                                      c.collectionIds = c.collectionIds
+                                          .where((id) =>
+                                              id != widget.collection.id)
+                                          .toList();
+                                      await provider.updateCharacter(c);
+                                    },
+                                    child: const Icon(Icons.close,
+                                        size: 13,
+                                        color: AppTheme.textSecondary),
+                                  ),
+                                ],
                               ),
-                              Text('${c.race} · ${c.gender[0]}',
-                                  style: const TextStyle(
-                                      color: AppTheme.textSecondary,
-                                      fontSize: 10)),
-                              const SizedBox(width: 8),
-                              GestureDetector(
-                                onTap: () async {
-                                  c.collectionIds = c.collectionIds
-                                      .where((id) => id != collection.id)
-                                      .toList();
-                                  c.collectionId =
-                                      c.collectionIds.isNotEmpty
-                                          ? c.collectionIds.first
-                                          : null;
-                                  await provider.updateCharacter(c);
-                                },
-                                child: const Icon(Icons.close,
-                                    size: 13,
-                                    color: AppTheme.textSecondary),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                            );
+                          },
+                        ),
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),

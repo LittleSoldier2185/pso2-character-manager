@@ -2,13 +2,13 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/character.dart';
+import '../models/character_data.dart';
 import '../providers/character_provider.dart';
 import '../services/share_service.dart';
 import '../theme/app_theme.dart';
 
 class ExportBundleDialog extends StatefulWidget {
-  final Character character;
+  final CharacterData character;
   const ExportBundleDialog({super.key, required this.character});
 
   @override
@@ -271,7 +271,7 @@ class _ToggleRow extends StatelessWidget {
 
 /// Show the export bundle dialog.
 Future<void> showExportBundleDialog(
-    BuildContext context, Character character) {
+    BuildContext context, CharacterData character) {
   return showDialog(
     context: context,
     builder: (_) => ExportBundleDialog(character: character),

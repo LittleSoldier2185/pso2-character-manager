@@ -2,8 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:archive/archive_io.dart';
 import 'package:path/path.dart' as p;
-import '../models/character.dart';
-import '../models/gallery_item.dart';
+import '../models/character_data.dart';
+import '../models/gallery_data.dart';
 
 /// Bundle format version — increment when structure changes.
 const int _kBundleVersion = 1;
@@ -59,8 +59,8 @@ class ShareService {
   /// Packs a character into a .pso2char bundle and writes it to [destPath].
   /// Returns null on success, error string on failure.
   static Future<String?> exportBundle({
-    required Character character,
-    required List<GalleryItem> galleryItems,
+    required CharacterData character,
+    required List<GalleryItemData> galleryItems,
     required String destPath,
     required ExportOptions options,
   }) async {
@@ -68,20 +68,25 @@ class ShareService {
       final archive = Archive();
 
       // 1. Character file
-      final charFile = File(character.characterFilePath);
+      final charFilePath = character.characterFilePath;
+      if (charFilePath == null) {
+        return 'Character file not found for main variant';
+      }
+      final charFile = File(charFilePath);
       if (!await charFile.exists()) {
-        return 'Character file not found: ${character.characterFilePath}';
+        return 'Character file not found: $charFilePath';
       }
       final charBytes = await charFile.readAsBytes();
       archive.addFile(
           ArchiveFile(character.gameFileName, charBytes.length, charBytes));
 
       // 2. Thumbnail (if exists)
-      if (character.thumbnailPath != null) {
-        final thumbFile = File(character.thumbnailPath!);
+      final thumbPath = character.thumbnailPath;
+      if (thumbPath != null) {
+        final thumbFile = File(thumbPath);
         if (await thumbFile.exists()) {
           final thumbBytes = await thumbFile.readAsBytes();
-          final thumbExt = p.extension(character.thumbnailPath!);
+          final thumbExt = p.extension(thumbPath);
           archive.addFile(
               ArchiveFile('thumbnail$thumbExt', thumbBytes.length, thumbBytes));
         }
@@ -90,10 +95,11 @@ class ShareService {
       // 3. Gallery images
       if (options.includeGallery) {
         for (int i = 0; i < galleryItems.length; i++) {
-          final imgFile = File(galleryItems[i].filePath);
+          final itemPath = galleryItems[i].filePath(character.folderPath);
+          final imgFile = File(itemPath);
           if (await imgFile.exists()) {
             final imgBytes = await imgFile.readAsBytes();
-            final imgExt = p.extension(galleryItems[i].filePath);
+            final imgExt = p.extension(itemPath);
             archive.addFile(ArchiveFile(
                 'gallery/image_$i$imgExt', imgBytes.length, imgBytes));
           }
@@ -118,7 +124,6 @@ class ShareService {
       final metaBytes = utf8.encode(jsonEncode(meta));
       archive.addFile(ArchiveFile('meta.json', metaBytes.length, metaBytes));
 
-      // Write zip to disk
       final encoder = ZipEncoder();
       final zipBytes = encoder.encode(archive);
       if (zipBytes == null) return 'Failed to encode bundle';
@@ -129,23 +134,83 @@ class ShareService {
     }
   }
 
-  /// Estimates bundle size in bytes without writing to disk.
+  /// Packs a single variant into a .pso2char bundle and writes it to [destPath].
+  /// Returns null on success, error string on failure.
+  static Future<String?> exportVariantBundle({
+    required CharacterData character,
+    required VariantData variant,
+    required String destPath,
+  }) async {
+    try {
+      final archive = Archive();
+
+      final charFilePath = character.charFileForVariant(variant.folderName);
+      if (charFilePath == null) {
+        return 'No character file found for variant "${variant.displayName}"';
+      }
+      final charFile = File(charFilePath);
+      if (!await charFile.exists()) return 'Character file not found';
+      final charBytes = await charFile.readAsBytes();
+      final gameFileName =
+          variant.originalFileName ?? p.basename(charFilePath);
+      archive.addFile(
+          ArchiveFile(gameFileName, charBytes.length, charBytes));
+
+      final thumbPath = character.thumbnailForVariant(variant.folderName);
+      if (thumbPath != null) {
+        final thumbFile = File(thumbPath);
+        if (await thumbFile.exists()) {
+          final thumbBytes = await thumbFile.readAsBytes();
+          final thumbExt = p.extension(thumbPath);
+          archive.addFile(ArchiveFile(
+              'thumbnail$thumbExt', thumbBytes.length, thumbBytes));
+        }
+      }
+
+      final meta = {
+        'version': _kBundleVersion,
+        'characterName': '${character.name} — ${variant.displayName}',
+        'race': character.race,
+        'gender': character.gender,
+        'originalFileName': gameFileName,
+        'description': character.description,
+        'tags': <String, dynamic>{},
+        'galleryCount': 0,
+      };
+      final metaBytes = utf8.encode(jsonEncode(meta));
+      archive
+          .addFile(ArchiveFile('meta.json', metaBytes.length, metaBytes));
+
+      final encoder = ZipEncoder();
+      final zipBytes = encoder.encode(archive);
+      if (zipBytes == null) return 'Failed to encode bundle';
+      await File(destPath).writeAsBytes(zipBytes);
+      return null;
+    } catch (e) {
+      return 'Export failed: $e';
+    }
+  }
+
   static Future<int> estimateBundleSize({
-    required Character character,
-    required List<GalleryItem> galleryItems,
+    required CharacterData character,
+    required List<GalleryItemData> galleryItems,
     required ExportOptions options,
   }) async {
     int total = 0;
     try {
-      final charFile = File(character.characterFilePath);
-      if (await charFile.exists()) total += await charFile.length();
-      if (character.thumbnailPath != null) {
-        final thumbFile = File(character.thumbnailPath!);
+      final charFilePath = character.characterFilePath;
+      if (charFilePath != null) {
+        final charFile = File(charFilePath);
+        if (await charFile.exists()) total += await charFile.length();
+      }
+      final thumbPath = character.thumbnailPath;
+      if (thumbPath != null) {
+        final thumbFile = File(thumbPath);
         if (await thumbFile.exists()) total += await thumbFile.length();
       }
       if (options.includeGallery) {
         for (final item in galleryItems) {
-          final f = File(item.filePath);
+          final f = File(item.filePath(character.folderPath));
           if (await f.exists()) total += await f.length();
         }
       }
@@ -204,12 +269,15 @@ class ShareService {
 
   /// Extracts a bundle into the app's storage directories.
   /// Returns the extracted character file path and optional thumbnail path.
+  /// Extracts a bundle into the new folder structure.
+  /// [variantFolderPath] — absolute path to the variant folder (already created).
+  /// [galleryFolderPath] — absolute path to character_gallery/ (already created).
   static Future<_ExtractResult?> extractBundle({
     required List<int> bundleBytes,
-    required String charactersDir,
-    required String thumbnailsDir,
-    required String galleryDir,
-    required String? customFileName, // null = use original
+    required String variantFolderPath,
+    required String galleryFolderPath,
+    required String variantFolderName,
+    required String? customFileName,
   }) async {
     try {
       final archive = ZipDecoder().decodeBytes(bundleBytes);
@@ -217,51 +285,49 @@ class ShareService {
       // Find character file
       final charFile = archive.files.where((f) {
         final ext = p.extension(f.name).replaceFirst('.', '').toLowerCase();
-        return Character.validExtensions.contains(ext) &&
+        return CharacterData.validExtensions.contains(ext) &&
             !f.name.contains('/');
       }).firstOrNull;
       if (charFile == null) return null;
 
       final originalName = p.basename(charFile.name);
       final storageName = customFileName ?? originalName;
-      final charDestPath = p.join(charactersDir, storageName);
-      // Avoid overwrite — append timestamp if collision
+      final charDestPath = p.join(variantFolderPath, storageName);
       final finalCharPath = await _uniquePath(charDestPath);
-      await File(finalCharPath)
-          .writeAsBytes(charFile.content as List<int>);
+      await File(finalCharPath).writeAsBytes(charFile.content as List<int>);
 
-      // Extract thumbnail
-      String? thumbPath;
+      // Extract thumbnail into variant folder
+      String? thumbFileName;
       final thumbFile = archive.files
           .where((f) => f.name.startsWith('thumbnail'))
           .firstOrNull;
       if (thumbFile != null) {
         final thumbExt = p.extension(thumbFile.name);
-        final thumbDest = p.join(
-            thumbnailsDir, '${DateTime.now().millisecondsSinceEpoch}$thumbExt');
-        await File(thumbDest)
+        thumbFileName = '${variantFolderName}_Thumbnail$thumbExt';
+        await File(p.join(variantFolderPath, thumbFileName))
             .writeAsBytes(thumbFile.content as List<int>);
-        thumbPath = thumbDest;
       }
 
       // Extract gallery images
-      final galleryPaths = <String>[];
+      final galleryFileNames = <String>[];
       final galleryFiles = archive.files
           .where((f) => f.name.startsWith('gallery/'))
           .toList();
-      for (final img in galleryFiles) {
+      for (int i = 0; i < galleryFiles.length; i++) {
+        final img = galleryFiles[i];
         final imgExt = p.extension(img.name);
-        final imgDest = p.join(
-            galleryDir, '${DateTime.now().millisecondsSinceEpoch}_${galleryPaths.length}$imgExt');
-        await File(imgDest).writeAsBytes(img.content as List<int>);
-        galleryPaths.add(imgDest);
+        final fileName =
+            '${DateTime.now().millisecondsSinceEpoch}_$i$imgExt';
+        await File(p.join(galleryFolderPath, fileName))
+            .writeAsBytes(img.content as List<int>);
+        galleryFileNames.add(fileName);
       }
 
       return _ExtractResult(
         characterFilePath: finalCharPath,
         originalFileName: originalName,
-        thumbnailPath: thumbPath,
-        galleryPaths: galleryPaths,
+        thumbnailFileName: thumbFileName,
+        galleryFileNames: galleryFileNames,
       );
     } catch (_) {
       return null;
@@ -283,13 +349,13 @@ class ShareService {
 class _ExtractResult {
   final String characterFilePath;
   final String originalFileName;
-  final String? thumbnailPath;
-  final List<String> galleryPaths;
+  final String? thumbnailFileName; // relative filename inside variant folder
+  final List<String> galleryFileNames; // relative filenames inside gallery folder
 
   const _ExtractResult({
     required this.characterFilePath,
     required this.originalFileName,
-    required this.thumbnailPath,
-    required this.galleryPaths,
+    required this.thumbnailFileName,
+    required this.galleryFileNames,
   });
 }

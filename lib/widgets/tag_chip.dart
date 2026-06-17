@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../models/tag.dart';
+import '../models/tag_data.dart';
 import '../theme/app_theme.dart';
 
 class TagChip extends StatelessWidget {
   /// Pass [tag] (uses Tag colour) or [label]+[color] for plain strings.
-  final Tag? tag;
+  final TagData? tag;
   final String? label;
   final Color? color;
   final VoidCallback? onDeleted;

@@ -3,19 +3,22 @@ import 'dart:ui';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:pasteboard/pasteboard.dart';
 import 'package:provider/provider.dart';
-import '../models/character.dart';
-import '../models/gallery_item.dart';
-import '../models/tag.dart';
+import '../models/character_data.dart';
+import '../models/gallery_data.dart';
+import '../models/tag_data.dart';
 import '../providers/character_provider.dart';
-import '../services/hive_service.dart';
+import '../services/data_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/tag_chip.dart';
+import 'add_variant_screen.dart';
 import 'export_bundle_dialog.dart';
 import 'tags_screen.dart';
 
 class CharacterDetailScreen extends StatefulWidget {
-  final Character character;
+  final CharacterData character;
   const CharacterDetailScreen({super.key, required this.character});
 
   @override
@@ -72,8 +75,6 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
       widget.character.description = _descController.text.trim();
       widget.character.tags = _tags;
       widget.character.collectionIds = _collectionIds;
-      widget.character.collectionId =
-          _collectionIds.isNotEmpty ? _collectionIds.first : null;
       await provider.updateCharacter(widget.character);
       if (mounted) setState(() { _isEditing = false; _isSaving = false; });
     } catch (e) {
@@ -128,8 +129,21 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
     );
   }
 
+  Future<void> _openFolder() async {
+    final folder = widget.character.folderPath;
+    if (Directory(folder).existsSync()) {
+      await Process.run('explorer.exe', [folder]);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Folder not found')),
+        );
+      }
+    }
+  }
+
   Future<void> _exportFile() async {
-    final ext = widget.character.characterFilePath.split('.').last;
+    final ext = (widget.character.characterFilePath ?? '').split('.').last;
     final result = await FilePicker.platform.saveFile(
       dialogTitle: 'Export character file',
       fileName: '${widget.character.name}.$ext',
@@ -195,66 +209,103 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
     final bool hasThumb = thumbPath != null && File(thumbPath).existsSync();
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(_isEditing ? 'Editing: ${c.name}' : c.name),
-        actions: [
-          // Share menu
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.ios_share_outlined),
-            tooltip: 'Share / Export',
+      body: Column(
+        children: [
+          const AppTitleBar(),
+          // ── Screen header ───────────────────────────────────────
+          Container(
+            height: 48,
             color: AppTheme.bgCard,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-              side: const BorderSide(color: AppTheme.borderColor),
-            ),
-            onSelected: (value) async {
-              if (value == 'bundle') {
-                await showExportBundleDialog(context, c);
-              } else if (value == 'file') {
-                await _exportFile();
-              }
-            },
-            itemBuilder: (_) => [
-              const PopupMenuItem<String>(
-                value: 'bundle',
-                child: Row(
-                  children: [
-                    Icon(Icons.file_upload_outlined,
-                        size: 15, color: AppTheme.textSecondary),
-                    SizedBox(width: 8),
-                    Text('Export as .pso2char bundle',
-                        style: TextStyle(fontSize: 13)),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_rounded,
+                      size: 18, color: AppTheme.textSecondary),
+                  onPressed: () => Navigator.pop(context),
+                  tooltip: 'Back',
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+                Expanded(
+                  child: Text(
+                    _isEditing ? 'Editing: ${c.name}' : c.name,
+                    style: const TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                // Share menu
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.ios_share_outlined,
+                      color: AppTheme.textPrimary),
+                  tooltip: 'Share / Export',
+                  color: AppTheme.bgCard,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: const BorderSide(color: AppTheme.borderColor),
+                  ),
+                  onSelected: (value) async {
+                    if (value == 'bundle') {
+                      await showExportBundleDialog(context, c);
+                    } else if (value == 'file') {
+                      await _exportFile();
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    const PopupMenuItem<String>(
+                      value: 'bundle',
+                      child: Row(
+                        children: [
+                          Icon(Icons.file_upload_outlined,
+                              size: 15, color: AppTheme.textSecondary),
+                          SizedBox(width: 8),
+                          Text('Export as .pso2char bundle',
+                              style: TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'file',
+                      child: Row(
+                        children: [
+                          Icon(Icons.save_alt_rounded,
+                              size: 15, color: AppTheme.textSecondary),
+                          SizedBox(width: 8),
+                          Text('Export raw file only',
+                              style: TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
-              ),
-              const PopupMenuItem<String>(
-                value: 'file',
-                child: Row(
-                  children: [
-                    Icon(Icons.save_alt_rounded,
-                        size: 15, color: AppTheme.textSecondary),
-                    SizedBox(width: 8),
-                    Text('Export raw file only',
-                        style: TextStyle(fontSize: 13)),
-                  ],
+                IconButton(
+                  icon: const Icon(Icons.folder_open_outlined,
+                      color: AppTheme.textPrimary),
+                  onPressed: _openFolder,
+                  tooltip: 'Open character folder',
                 ),
-              ),
-            ],
-          ),
-          if (!_isEditing)
-            IconButton(
-              icon: const Icon(Icons.edit_outlined),
-              onPressed: () => setState(() => _isEditing = true),
-              tooltip: 'Edit',
+                if (!_isEditing)
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined,
+                        color: AppTheme.textPrimary),
+                    onPressed: () => setState(() => _isEditing = true),
+                    tooltip: 'Edit',
+                  ),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  onPressed: _confirmDelete,
+                  tooltip: 'Delete',
+                ),
+              ],
             ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline, color: Colors.red),
-            onPressed: _confirmDelete,
-            tooltip: 'Delete',
           ),
-        ],
-      ),
-      body: SingleChildScrollView(
+          const Divider(height: 1, color: AppTheme.borderColor),
+          // ── Body ────────────────────────────────────────────────
+          Expanded(child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -439,13 +490,18 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
 
                   _fieldLabel('Character file'),
                   const SizedBox(height: 4),
-                  Text(c.characterFilePath.split(r'\').last,
+                  Text(c.characterFilePath?.split(r'\').last ?? '',
                       style: const TextStyle(
                           color: AppTheme.textSecondary, fontSize: 12)),
                   const SizedBox(height: 2),
                   Text('Added ${_formatDate(c.createdAt)}',
                       style: const TextStyle(
                           color: AppTheme.textSecondary, fontSize: 11)),
+
+                  const SizedBox(height: 20),
+
+                  // ── Variants ─────────────────────────────────────
+                  _VariantsSection(character: c),
 
                   const SizedBox(height: 24),
                   const Divider(color: AppTheme.borderColor, height: 1),
@@ -492,8 +548,10 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
             ),
           ],
         ),
-      ),
-    );
+      )),
+    ],
+  ),
+);
   }
 
   Widget _buildCollectionPicker(List collections) {
@@ -596,7 +654,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
     // Resolve tag IDs to Tag objects — skip any deleted/unknown IDs
     final assignedTags = _tags
         .map((id) => provider.tagById(id))
-        .whereType<Tag>()
+        .whereType<TagData>()
         .toList();
     // Tags not yet assigned to this character
     final unassignedTags =
@@ -723,7 +781,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
 // ── Tier picker widget ───────────────────────────────────
 
 class _TierPicker extends StatelessWidget {
-  final Character character;
+  final CharacterData character;
   const _TierPicker({required this.character});
 
   @override
@@ -801,7 +859,7 @@ class _TierPicker extends StatelessWidget {
 // ── Apply toggle button for detail page ───────────────────────────
 
 class _DetailApplyButton extends StatefulWidget {
-  final Character character;
+  final CharacterData character;
   const _DetailApplyButton({required this.character});
 
   @override
@@ -842,11 +900,7 @@ class _DetailApplyButtonState extends State<_DetailApplyButton> {
                   : Icons.add_circle_outline_rounded,
               size: 16),
       label: Text(
-        isApplied
-            ? (widget.character.slotNumber != null
-                ? 'Applied · Slot ${widget.character.slotNumber}'
-                : 'Applied to game')
-            : 'Apply to game',
+        isApplied ? 'Applied to game' : 'Apply to game',
         style: const TextStyle(fontSize: 12),
       ),
       style: ElevatedButton.styleFrom(
@@ -874,7 +928,7 @@ bool _isImagePath(String path) {
 }
 
 class _CharacterGallery extends StatefulWidget {
-  final Character character;
+  final CharacterData character;
   const _CharacterGallery({required this.character});
 
   @override
@@ -884,7 +938,6 @@ class _CharacterGallery extends StatefulWidget {
 class _CharacterGalleryState extends State<_CharacterGallery> {
   bool _isDragOver = false;
   int _columns = 3;
-  Set<String> _blurredItems = {};
   static const double _cellSpacing = 4.0;
 
   // Size options: label, icon, column count
@@ -898,9 +951,12 @@ class _CharacterGalleryState extends State<_CharacterGallery> {
   @override
   void initState() {
     super.initState();
-    final hive = HiveService();
-    _columns = hive.getGalleryColumns();
-    _blurredItems = hive.getBlurredItems();
+    _loadSettings();
+  }
+
+  Future<void> _loadSettings() async {
+    final s = await DataService.instance.getSettings();
+    if (mounted) setState(() => _columns = s.galleryColumns);
   }
 
   Future<void> _addFiles(List<String> paths) async {
@@ -933,15 +989,18 @@ class _CharacterGalleryState extends State<_CharacterGallery> {
     }
   }
 
-  void _viewImage(BuildContext context, List<GalleryItem> items, int index) {
+  void _viewImage(BuildContext context, List<GalleryItemData> items, int index) {
     showDialog(
       context: context,
       barrierColor: Colors.black.withOpacity(0.85),
-      builder: (_) => _GalleryViewer(items: items, initialIndex: index),
+      builder: (_) => _GalleryViewer(
+          items: items,
+          folderPath: widget.character.folderPath,
+          initialIndex: index),
     );
   }
 
-  void _confirmDelete(GalleryItem item) {
+  void _confirmDelete(GalleryItemData item) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -967,15 +1026,21 @@ class _CharacterGalleryState extends State<_CharacterGallery> {
     );
   }
 
-  Future<void> _toggleBlur(String itemId) async {
-    await HiveService().toggleBlurredItem(itemId);
-    setState(() {
-      if (_blurredItems.contains(itemId)) {
-        _blurredItems.remove(itemId);
-      } else {
-        _blurredItems.add(itemId);
-      }
-    });
+  Future<void> _toggleBlur(GalleryItemData item) async {
+    final provider = context.read<CharacterProvider>();
+    await provider.toggleGalleryItemBlur(item);
+  }
+
+  Future<void> _setAsThumbnail(GalleryItemData item) async {
+    final provider = context.read<CharacterProvider>();
+    await provider.updateCharacterThumbnail(
+        widget.character, item.filePath(widget.character.folderPath));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Thumbnail updated'),
+        duration: Duration(seconds: 2),
+      ));
+    }
   }
 
   @override
@@ -1025,7 +1090,7 @@ class _CharacterGalleryState extends State<_CharacterGallery> {
               ),
               onSelected: (cols) async {
                 setState(() => _columns = cols);
-                await HiveService().saveGalleryColumns(cols);
+                await DataService.instance.saveGalleryColumns(cols);
               },
               itemBuilder: (_) => _sizeOptions
                   .map((opt) => PopupMenuItem<int>(
@@ -1105,19 +1170,25 @@ class _CharacterGalleryState extends State<_CharacterGallery> {
                             cell = _buildAddButton(cellSize);
                           } else if (index - 1 < items.length) {
                             final item = items[index - 1];
+                            final resolvedPath = item.filePath(
+                                widget.character.folderPath);
                             final fileExists =
-                                File(item.filePath).existsSync();
+                                File(resolvedPath).existsSync();
                             cell = _GalleryThumb(
                               item: item,
+                              filePath: resolvedPath,
                               fileExists: fileExists,
                               size: cellSize,
-                              isBlurred: _blurredItems.contains(item.id),
+                              isBlurred: item.isBlurred,
                               onTap: fileExists
                                   ? () => _viewImage(
                                       context, items, index - 1)
                                   : null,
                               onDelete: () => _confirmDelete(item),
-                              onToggleBlur: () => _toggleBlur(item.id),
+                              onToggleBlur: () => _toggleBlur(item),
+                              onSetAsThumbnail: fileExists
+                                  ? () => _setAsThumbnail(item)
+                                  : null,
                             );
                           } else {
                             // Empty placeholder to fill the last row
@@ -1191,23 +1262,29 @@ class _CharacterGalleryState extends State<_CharacterGallery> {
 
 // ── Gallery thumbnail ───────────────────────────────────────────
 
+enum _GalleryCtxAction { copy, setThumbnail }
+
 class _GalleryThumb extends StatefulWidget {
-  final GalleryItem item;
+  final GalleryItemData item;
+  final String filePath;
   final bool fileExists;
   final double size;
   final bool isBlurred;
   final VoidCallback? onTap;
   final VoidCallback onDelete;
   final VoidCallback onToggleBlur;
+  final VoidCallback? onSetAsThumbnail;
 
   const _GalleryThumb({
     required this.item,
+    required this.filePath,
     required this.fileExists,
     required this.size,
     required this.isBlurred,
     required this.onTap,
     required this.onDelete,
     required this.onToggleBlur,
+    this.onSetAsThumbnail,
   });
 
   @override
@@ -1217,6 +1294,63 @@ class _GalleryThumb extends StatefulWidget {
 class _GalleryThumbState extends State<_GalleryThumb> {
   bool _hovered = false;
 
+  Future<void> _copyToClipboard() async {
+    try {
+      final bytes = await File(widget.filePath).readAsBytes();
+      await Pasteboard.writeImage(bytes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Image copied to clipboard'),
+          duration: Duration(seconds: 2),
+        ));
+      }
+    } catch (_) {}
+  }
+
+  void _showContextMenu(BuildContext ctx, Offset pos) async {
+    final size = MediaQuery.of(ctx).size;
+    final result = await showMenu<_GalleryCtxAction>(
+      context: ctx,
+      color: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: AppTheme.borderColor),
+      ),
+      position: RelativeRect.fromLTRB(
+          pos.dx, pos.dy, size.width - pos.dx, size.height - pos.dy),
+      items: [
+        PopupMenuItem(
+          value: _GalleryCtxAction.copy,
+          child: _menuRow(Icons.copy_rounded, 'Copy to clipboard'),
+        ),
+        if (widget.onSetAsThumbnail != null)
+          PopupMenuItem(
+            value: _GalleryCtxAction.setThumbnail,
+            child: _menuRow(Icons.portrait_rounded, 'Set as thumbnail'),
+          ),
+      ],
+    );
+    if (!mounted) return;
+    switch (result) {
+      case _GalleryCtxAction.copy:
+        await _copyToClipboard();
+      case _GalleryCtxAction.setThumbnail:
+        widget.onSetAsThumbnail?.call();
+      case null:
+        break;
+    }
+  }
+
+  Widget _menuRow(IconData icon, String label) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 14, color: AppTheme.textSecondary),
+      const SizedBox(width: 8),
+      Text(label,
+          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+    ],
+  );
+
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
@@ -1224,6 +1358,9 @@ class _GalleryThumbState extends State<_GalleryThumb> {
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
+        onSecondaryTapUp: widget.fileExists
+            ? (d) => _showContextMenu(context, d.globalPosition)
+            : null,
         child: Container(
           width: widget.size,
           height: widget.size,
@@ -1244,13 +1381,13 @@ class _GalleryThumbState extends State<_GalleryThumb> {
                             imageFilter: ImageFilter.blur(
                                 sigmaX: 18, sigmaY: 18),
                             child: Image.file(
-                              File(widget.item.filePath),
+                              File(widget.filePath),
                               fit: BoxFit.cover,
                               gaplessPlayback: true,
                             ),
                           )
                         : Image.file(
-                            File(widget.item.filePath),
+                            File(widget.filePath),
                             fit: BoxFit.cover,
                             gaplessPlayback: true,
                           )
@@ -1345,10 +1482,12 @@ class _GalleryThumbState extends State<_GalleryThumb> {
 // ── Full-screen gallery viewer with swipe navigation ────────────────
 
 class _GalleryViewer extends StatefulWidget {
-  final List<GalleryItem> items;
+  final List<GalleryItemData> items;
+  final String folderPath;
   final int initialIndex;
   const _GalleryViewer({
     required this.items,
+    required this.folderPath,
     required this.initialIndex,
   });
 
@@ -1391,7 +1530,7 @@ class _GalleryViewerState extends State<_GalleryViewer> {
                 minScale: 0.5,
                 maxScale: 6,
                 child: Image.file(
-                  File(item.filePath),
+                  File(item.filePath(widget.folderPath)),
                   fit: BoxFit.contain,
                   gaplessPlayback: true,
                 ),
@@ -1485,3 +1624,547 @@ class _GalleryViewerState extends State<_GalleryViewer> {
     );
   }
 }
+
+// ── Variants section ──────────────────────────────────────────────────
+
+class _VariantsSection extends StatefulWidget {
+  final CharacterData character;
+  const _VariantsSection({required this.character});
+
+  @override
+  State<_VariantsSection> createState() => _VariantsSectionState();
+}
+
+class _VariantsSectionState extends State<_VariantsSection> {
+  double _cardWidth = 100;
+
+  // Thumbnail height + content area (taller at Medium+ because extra info shows)
+  static double _rowHeight(double w) =>
+      (w * 0.85).roundToDouble() + (w >= 100.0 ? 76.0 : 44.0);
+
+  static const _sizeOptions = [
+    (label: 'Small',       icon: Icons.grid_on_rounded,      width: 72.0),
+    (label: 'Medium',      icon: Icons.view_module_rounded,  width: 100.0),
+    (label: 'Large',       icon: Icons.view_agenda_outlined, width: 130.0),
+    (label: 'Extra large', icon: Icons.crop_square_rounded,  width: 160.0),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<CharacterProvider>();
+    final variants = widget.character.variants;
+    final hasGameFolder = provider.gameFolderPath != null;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text('Variants',
+                style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500)),
+            if (variants.length > 1) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgSurface,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.borderColor),
+                ),
+                child: Text('${variants.length}',
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary, fontSize: 10)),
+              ),
+            ],
+            const Spacer(),
+            PopupMenuButton<double>(
+              color: AppTheme.bgCard,
+              tooltip: 'Card size',
+              icon: Icon(
+                _sizeOptions
+                    .firstWhere((o) => o.width == _cardWidth,
+                        orElse: () => _sizeOptions[1])
+                    .icon,
+                size: 15,
+                color: AppTheme.textSecondary,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: const BorderSide(color: AppTheme.borderColor),
+              ),
+              onSelected: (w) => setState(() => _cardWidth = w),
+              itemBuilder: (_) => _sizeOptions
+                  .map((opt) => PopupMenuItem<double>(
+                        value: opt.width,
+                        child: Row(
+                          children: [
+                            Icon(opt.icon,
+                                size: 15,
+                                color: _cardWidth == opt.width
+                                    ? AppTheme.accent
+                                    : AppTheme.textSecondary),
+                            const SizedBox(width: 10),
+                            Text(opt.label,
+                                style: TextStyle(
+                                    color: _cardWidth == opt.width
+                                        ? AppTheme.accent
+                                        : AppTheme.textPrimary,
+                                    fontSize: 13)),
+                            if (_cardWidth == opt.width) ...[
+                              const Spacer(),
+                              Icon(Icons.check_rounded,
+                                  size: 13, color: AppTheme.accent),
+                            ],
+                          ],
+                        ),
+                      ))
+                  .toList(),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        SizedBox(
+          height: _rowHeight(_cardWidth),
+          child: ReorderableListView(
+            scrollDirection: Axis.horizontal,
+            buildDefaultDragHandles: false,
+            onReorder: (oldIndex, newIndex) {
+              context.read<CharacterProvider>().reorderVariants(
+                  widget.character, oldIndex, newIndex);
+            },
+            footer: Padding(
+              padding: const EdgeInsets.only(left: 0),
+              child: _AddVariantButton(
+                width: _cardWidth,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        AddVariantScreen(character: widget.character),
+                  ),
+                ),
+              ),
+            ),
+            children: [
+              for (int i = 0; i < variants.length; i++)
+                ReorderableDelayedDragStartListener(
+                  key: ValueKey(variants[i].folderName),
+                  index: i,
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: _VariantCard(
+                      variant: variants[i],
+                      character: widget.character,
+                      cardWidth: _cardWidth,
+                      isMain: variants[i].folderName ==
+                          widget.character.mainVariant,
+                      isApplied: widget.character
+                          .isVariantApplied(variants[i].folderName),
+                      hasGameFolder: hasGameFolder,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ── Variant card ──────────────────────────────────────────────────────
+
+class _VariantCard extends StatelessWidget {
+  final VariantData variant;
+  final CharacterData character;
+  final bool isMain;
+  final bool isApplied;
+  final bool hasGameFolder;
+  final double cardWidth;
+
+  const _VariantCard({
+    required this.variant,
+    required this.character,
+    required this.cardWidth,
+    required this.isMain,
+    required this.isApplied,
+    required this.hasGameFolder,
+  });
+
+  void _showRenameDialog(BuildContext context) {
+    final ctrl = TextEditingController(text: variant.displayName);
+    showDialog<String>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: const Text('Rename variant'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: 'Variant name'),
+          onSubmitted: (v) {
+            if (v.trim().isNotEmpty) Navigator.pop(context, v.trim());
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              final name = ctrl.text.trim();
+              if (name.isNotEmpty) Navigator.pop(context, name);
+            },
+            child: const Text('Rename'),
+          ),
+        ],
+      ),
+    ).then((name) {
+      if (name != null && context.mounted) {
+        context.read<CharacterProvider>().renameVariant(character, variant, name);
+      }
+    });
+  }
+
+  Future<void> _apply(BuildContext context) async {
+    final error = await context
+        .read<CharacterProvider>()
+        .applyVariant(character, variant.folderName);
+    if (error != null && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(error), backgroundColor: Colors.red));
+    }
+  }
+
+  Future<void> _unapply(BuildContext context) async {
+    await context
+        .read<CharacterProvider>()
+        .unapplyVariant(character, variant.folderName);
+  }
+
+  Future<void> _changeThumbnail(BuildContext context) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.image,
+      dialogTitle: 'Select thumbnail for ${variant.displayName}',
+    );
+    if (result != null &&
+        result.files.single.path != null &&
+        context.mounted) {
+      await context.read<CharacterProvider>().setVariantThumbnail(
+          character, variant, result.files.single.path!);
+    }
+  }
+
+  Future<void> _exportBundle(BuildContext context) async {
+    final safeName = variant.displayName
+        .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+    final result = await FilePicker.platform.saveFile(
+      dialogTitle: 'Export variant as bundle',
+      fileName: '${character.name}_$safeName.pso2char',
+      type: FileType.custom,
+      allowedExtensions: ['pso2char'],
+    );
+    if (result != null && context.mounted) {
+      final error = await context
+          .read<CharacterProvider>()
+          .exportVariantBundle(character, variant, result);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(error ?? 'Exported successfully'),
+          backgroundColor: error != null ? Colors.red : Colors.green,
+        ));
+      }
+    }
+  }
+
+  void _confirmDelete(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: const Text('Delete variant?'),
+        content: Text(
+          'Permanently delete "${variant.displayName}"? '
+          'All files in this variant folder will be removed.',
+          style: const TextStyle(
+              color: AppTheme.textSecondary, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style:
+                ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () async {
+              Navigator.pop(context);
+              final error = await context
+                  .read<CharacterProvider>()
+                  .deleteVariant(character, variant);
+              if (error != null && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                  content: Text(error),
+                  backgroundColor: Colors.red,
+                ));
+              }
+            },
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatSyncDate(DateTime dt) =>
+      '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final thumbPath = character.thumbnailForVariant(variant.folderName);
+    final thumbFile = thumbPath != null ? File(thumbPath) : null;
+    final hasThumb = thumbFile != null && thumbFile.existsSync();
+    final thumbHeight = (cardWidth * 0.85).roundToDouble();
+    final showDetails = cardWidth >= 100.0;
+
+    return PopupMenuButton<_VariantAction>(
+      color: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: AppTheme.borderColor),
+      ),
+      onSelected: (action) async {
+        switch (action) {
+          case _VariantAction.rename:
+            _showRenameDialog(context);
+          case _VariantAction.changeThumbnail:
+            await _changeThumbnail(context);
+          case _VariantAction.duplicate:
+            await context
+                .read<CharacterProvider>()
+                .duplicateVariant(character, variant);
+          case _VariantAction.setMain:
+            await context
+                .read<CharacterProvider>()
+                .setMainVariant(character, variant.folderName);
+          case _VariantAction.apply:
+            await _apply(context);
+          case _VariantAction.unapply:
+            await _unapply(context);
+          case _VariantAction.exportBundle:
+            await _exportBundle(context);
+          case _VariantAction.delete:
+            _confirmDelete(context);
+        }
+      },
+      itemBuilder: (_) => [
+        const PopupMenuItem(
+          value: _VariantAction.rename,
+          child: _MenuRow(Icons.edit_outlined, 'Rename'),
+        ),
+        const PopupMenuItem(
+          value: _VariantAction.changeThumbnail,
+          child: _MenuRow(Icons.image_outlined, 'Change thumbnail'),
+        ),
+        const PopupMenuItem(
+          value: _VariantAction.duplicate,
+          child: _MenuRow(Icons.copy_outlined, 'Duplicate'),
+        ),
+        const PopupMenuDivider(),
+        if (!isMain)
+          const PopupMenuItem(
+            value: _VariantAction.setMain,
+            child: _MenuRow(Icons.star_outline_rounded, 'Set as main'),
+          ),
+        if (hasGameFolder && !isApplied)
+          const PopupMenuItem(
+            value: _VariantAction.apply,
+            child: _MenuRow(Icons.upload_rounded, 'Apply to game'),
+          ),
+        if (isApplied)
+          const PopupMenuItem(
+            value: _VariantAction.unapply,
+            child: _MenuRow(Icons.eject_rounded, 'Unapply'),
+          ),
+        const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: _VariantAction.exportBundle,
+          child: _MenuRow(Icons.file_upload_outlined, 'Export as bundle'),
+        ),
+        const PopupMenuItem(
+          value: _VariantAction.delete,
+          child: _MenuRow(Icons.delete_outline, 'Delete',
+              color: Colors.redAccent),
+        ),
+      ],
+      child: Container(
+        width: cardWidth,
+        decoration: BoxDecoration(
+          color: AppTheme.bgSurface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isMain
+                ? AppTheme.accent.withValues(alpha: 0.6)
+                : AppTheme.borderColor,
+            width: isMain ? 1.5 : 1,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Thumbnail
+            ClipRRect(
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(7)),
+              child: SizedBox(
+                width: cardWidth,
+                height: thumbHeight,
+                child: hasThumb
+                    ? Image.file(thumbFile!, fit: BoxFit.cover)
+                    : Container(
+                        color: AppTheme.bgCard,
+                        child: const Icon(Icons.person_outline_rounded,
+                            size: 26, color: AppTheme.borderColor),
+                      ),
+              ),
+            ),
+            // Name + badges + optional detail info
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 4, 4, 5),
+              child: Column(
+                children: [
+                  Text(
+                    variant.displayName,
+                    style: const TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (isMain)
+                        _badge('Main', AppTheme.accent),
+                      if (isApplied) ...[
+                        if (isMain) const SizedBox(width: 3),
+                        _badge('On', AppTheme.accentGold),
+                      ],
+                    ],
+                  ),
+                  if (showDetails) ...[
+                    const SizedBox(height: 5),
+                    if (variant.originalFileName != null)
+                      Text(
+                        variant.originalFileName!,
+                        style: const TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 8),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                      ),
+                    if (variant.lastSyncedAt != null)
+                      Text(
+                        _formatSyncDate(variant.lastSyncedAt!),
+                        style: const TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 8),
+                        textAlign: TextAlign.center,
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _badge(String text, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.15),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                color: color, fontSize: 8, fontWeight: FontWeight.w600)),
+      );
+}
+
+enum _VariantAction {
+  rename,
+  changeThumbnail,
+  duplicate,
+  setMain,
+  apply,
+  unapply,
+  exportBundle,
+  delete,
+}
+
+class _MenuRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final Color? color;
+  const _MenuRow(this.icon, this.label, {this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = color ?? AppTheme.textPrimary;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 14, color: color ?? AppTheme.textSecondary),
+        const SizedBox(width: 8),
+        Text(label, style: TextStyle(color: c, fontSize: 13)),
+      ],
+    );
+  }
+}
+
+// ── Add variant button ────────────────────────────────────────────────
+
+class _AddVariantButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final double width;
+  const _AddVariantButton({required this.onTap, this.width = 100});
+
+  @override
+  Widget build(BuildContext context) {
+    final height = (width * 0.85).roundToDouble() + (width >= 100.0 ? 62.0 : 40.0);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: AppTheme.borderColor,
+              width: 1,
+              style: BorderStyle.solid),
+        ),
+        child: const Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.add_rounded, size: 22, color: AppTheme.textSecondary),
+            SizedBox(height: 4),
+            Text('Add',
+                style: TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 10)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+

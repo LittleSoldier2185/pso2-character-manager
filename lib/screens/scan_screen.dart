@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/character_provider.dart';
-import '../models/character.dart';
+import '../models/character_data.dart';
 import '../theme/app_theme.dart';
 import 'add_character_screen.dart';
 
@@ -39,42 +39,13 @@ class _ScanScreenState extends State<ScanScreen> {
       if (mounted) setState(() => _scannedFiles.remove(path));
     }
     if (mounted) {
-      final over = provider.appliedCount - 50;
-      if (over > 0) {
-        _showOverSlotNotification(over);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Imported ${files.length} character${files.length == 1 ? '' : 's'}'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    }
-  }
-
-  void _showOverSlotNotification(int over) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Row(
-          children: [
-            const Icon(Icons.warning_amber_rounded,
-                color: Colors.white, size: 16),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Import complete — but you\'re $over slot${over == 1 ? '' : 's'} over the limit (${Provider.of<CharacterProvider>(context, listen: false).appliedCount}/50). PSO2 only supports 50 characters.',
-                style: const TextStyle(fontSize: 12),
-              ),
-            ),
-          ],
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Imported ${files.length} character${files.length == 1 ? '' : 's'}'),
+          backgroundColor: Colors.green,
         ),
-        backgroundColor: Colors.orange.shade700,
-        duration: const Duration(seconds: 6),
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      ),
-    );
+      );
+    }
   }
 
   String _fileNameWithoutExt(String path) {
@@ -263,8 +234,6 @@ class _ScanScreenState extends State<ScanScreen> {
             );
             if (mounted) {
               setState(() => _scannedFiles.remove(path));
-              final over = provider.appliedCount - 50;
-              if (over > 0) _showOverSlotNotification(over);
             }
           },
           onDismiss: () => setState(() => _scannedFiles.remove(path)),
@@ -291,7 +260,7 @@ class _ScanResultRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final fileName = filePath.split(r'\').last.split('/').last;
     final ext = fileName.split('.').last.toLowerCase();
-    final raceGender = Character.detectRaceGender(filePath);
+    final raceGender = CharacterData.detectRaceGender(filePath);
     final raceColor = AppTheme.raceColor(raceGender['race'] ?? 'Unknown');
 
     return Container(

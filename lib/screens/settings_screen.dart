@@ -1,10 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../main.dart';
+import '../patch_notes.dart';
 import '../providers/character_provider.dart';
-import '../services/hive_service.dart';
+import '../services/app_update_service.dart';
+import '../services/data_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/app_title_bar.dart';
 import '../widgets/tag_chip.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -18,6 +22,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _migrating = false;
   int _migProgress = 0;
   int _migTotal = 0;
+
+  bool _checkingUpdate = false;
+  AppUpdateInfo? _updateResult;
 
   // ── Save location ──────────────────────────────────────────────
 
@@ -100,12 +107,121 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // ── Release notes dialog ───────────────────────────────────────
+
+  void _showReleaseNotes(AppUpdateInfo info) {
+    showDialog(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: AppTheme.bgCard,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: SizedBox(
+          width: 480,
+          height: 360,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 12, 12),
+                child: Row(
+                  children: [
+                    Icon(Icons.new_releases_outlined,
+                        size: 16, color: AppTheme.accentGold),
+                    const SizedBox(width: 8),
+                    Text(
+                      'What\'s new in v${info.version}',
+                      style: const TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close,
+                          size: 16, color: AppTheme.textSecondary),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: AppTheme.borderColor),
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Text(
+                    info.body?.trim().isNotEmpty == true
+                        ? info.body!
+                        : 'No release notes provided.',
+                    style: const TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                        height: 1.6),
+                  ),
+                ),
+              ),
+              const Divider(height: 1, color: AppTheme.borderColor),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: TextButton.styleFrom(
+                          foregroundColor: AppTheme.textSecondary),
+                      child: const Text('Close'),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        launchUrl(Uri.parse(info.url),
+                            mode: LaunchMode.externalApplication);
+                      },
+                      icon: const Icon(Icons.download_rounded, size: 14),
+                      label: Text('Download v${info.version}'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.accentGold,
+                        foregroundColor: AppTheme.bgDark,
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ── App update ────────────────────────────────────────────────
+
+  Future<void> _checkUpdate() async {
+    setState(() { _checkingUpdate = true; _updateResult = null; });
+    final info = await AppUpdateService.check();
+    if (!mounted) return;
+    PSO2App.updateNotifier.value = info;
+    setState(() { _checkingUpdate = false; _updateResult = info; });
+    if (info == null) {
+      ScaffoldMessenger.of(context).showSnackBar(  // ignore: use_build_context_synchronously
+        const SnackBar(
+          content: Text('You\'re up to date!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
   // ── Accent color ───────────────────────────────────────────────
 
   Future<void> _setAccent(Color color) async {
     AppTheme.setAccent(color);
-    final hive = HiveService();
-    await hive.saveAccentColor(color);
+    await DataService.instance.saveAccentColor(color);
     PSO2App.themeNotifier.value = color;
     if (mounted) setState(() {});
   }
@@ -124,8 +240,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Consumer<CharacterProvider>(
       builder: (context, provider, _) {
         return Scaffold(
-          appBar: AppBar(title: const Text('Settings')),
-          body: ListView(
+          body: Column(
+            children: [
+              const AppTitleBar(),
+              Container(
+                height: 48,
+                color: AppTheme.bgCard,
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_rounded,
+                          size: 18, color: AppTheme.textSecondary),
+                      onPressed: () => Navigator.pop(context),
+                      tooltip: 'Back',
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                    ),
+                    const Text(
+                      'Settings',
+                      style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1, color: AppTheme.borderColor),
+              Expanded(
+                child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
 
@@ -305,9 +449,71 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 ),
               ),
               const SizedBox(height: 24),
+
+              // ── About / Updates ──────────────────────────────
+              _sectionHeader('About'),
+              const SizedBox(height: 10),
+              _settingTile(
+                icon: Icons.article_outlined,
+                title: 'Patch notes',
+                subtitle: "What's new in v$kAppVersion",
+                trailing: OutlinedButton(
+                  onPressed: () => showPatchNotesDialog(context),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.textSecondary,
+                    side: const BorderSide(color: AppTheme.borderColor),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 8),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                  child: const Text('View'),
+                ),
+              ),
+              const SizedBox(height: 10),
+              _settingTile(
+                icon: Icons.system_update_alt_rounded,
+                title: 'App version',
+                subtitle: 'v$kAppVersion',
+                trailing: _checkingUpdate
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : _updateResult != null
+                        ? ElevatedButton.icon(
+                            onPressed: () =>
+                                _showReleaseNotes(_updateResult!),
+                            icon: const Icon(Icons.download_rounded, size: 14),
+                            label: Text('Download v${_updateResult!.version}'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.accentGold,
+                              foregroundColor: AppTheme.bgDark,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 14, vertical: 8),
+                              textStyle: const TextStyle(fontSize: 12),
+                            ),
+                          )
+                        : OutlinedButton(
+                            onPressed: _checkUpdate,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppTheme.textSecondary,
+                              side: const BorderSide(
+                                  color: AppTheme.borderColor),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 8),
+                              textStyle: const TextStyle(fontSize: 12),
+                            ),
+                            child: const Text('Check for updates'),
+                          ),
+              ),
+              const SizedBox(height: 24),
             ],
           ),
-        );
+        ),
+      ],
+    ),
+  );
       },
     );
   }
