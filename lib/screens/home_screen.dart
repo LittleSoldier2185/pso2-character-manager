@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/character.dart';
+import '../models/character_data.dart';
 import '../providers/character_provider.dart';
-import '../services/hive_service.dart';
+import '../services/data_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/character_card.dart';
 import '../widgets/character_spinner.dart';
+import '../widgets/skeleton.dart';
 import 'character_detail_screen.dart';
 import 'import_bundle_dialog.dart';
 
@@ -26,7 +27,12 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
-    _cardSize = HiveService().getCardSize();
+    _loadCardSize();
+  }
+
+  Future<void> _loadCardSize() async {
+    final size = await DataService.instance.getCardSize();
+    if (mounted) setState(() => _cardSize = size);
   }
 
   @override
@@ -43,13 +49,15 @@ class _HomeScreenState extends State<HomeScreen> {
               cardSize: _cardSize,
               onSizeChanged: (i) async {
                 setState(() => _cardSize = i);
-                await HiveService().saveCardSize(i);
+                await DataService.instance.saveCardSize(i);
               },
             ),
             Expanded(
-              child: characters.isEmpty
-                  ? _buildEmpty(provider)
-                  : _buildGrid(context, characters),
+              child: provider.isLoading
+                  ? SkeletonCardGrid(cardSize: _cardSize)
+                  : characters.isEmpty
+                      ? _buildEmpty(provider)
+                      : _buildGrid(context, characters),
             ),
           ],
         );

@@ -1,12 +1,14 @@
 import 'dart:io';
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:pasteboard/pasteboard.dart';
 import 'package:provider/provider.dart';
-import '../models/gallery_item.dart';
-import '../models/character.dart';
+import '../models/gallery_data.dart';
+import '../models/character_data.dart';
 import '../providers/character_provider.dart';
-import '../services/hive_service.dart';
+import '../services/data_service.dart';
 import '../theme/app_theme.dart';
+import '../widgets/skeleton.dart';
 import 'character_detail_screen.dart';
 
 class GalleryScreen extends StatefulWidget {
@@ -19,7 +21,6 @@ class GalleryScreen extends StatefulWidget {
 class _GalleryScreenState extends State<GalleryScreen> {
   String? _filterCharacterId;
   String _search = '';
-  Set<String> _blurredItems = {};
   int _sizeIndex = 3; // 0=S,1=M,2=L,3=XL
 
   // maxCrossAxisExtent per size
@@ -64,19 +65,16 @@ class _GalleryScreenState extends State<GalleryScreen> {
   @override
   void initState() {
     super.initState();
-    _blurredItems = HiveService().getBlurredItems();
-    _sizeIndex = HiveService().getGallerySize();
+    _loadSettings();
   }
 
-  Future<void> _toggleBlur(String itemId) async {
-    await HiveService().toggleBlurredItem(itemId);
-    setState(() {
-      if (_blurredItems.contains(itemId)) {
-        _blurredItems.remove(itemId);
-      } else {
-        _blurredItems.add(itemId);
-      }
-    });
+  Future<void> _loadSettings() async {
+    final size = await DataService.instance.getGallerySize();
+    if (mounted) setState(() => _sizeIndex = size);
+  }
+
+  Future<void> _toggleBlur(GalleryItemData item) async {
+    await context.read<CharacterProvider>().toggleGalleryItemBlur(item);
   }
 
   @override
@@ -148,7 +146,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     ),
                     onSelected: (i) async {
                       setState(() => _sizeIndex = i);
-                      await HiveService().saveGallerySize(i);
+                      await DataService.instance.saveGallerySize(i);
                     },
                     itemBuilder: (_) => [
                       _gallerySizeItem(3, 'Extra large',
@@ -235,7 +233,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
 
             // ── Grid ─────────────────────────────────────────
             Expanded(
-              child: items.isEmpty
+              child: provider.isLoading
+                  ? const SkeletonGalleryGrid()
+                  : items.isEmpty
                   ? _buildEmpty(charsWithImages.isEmpty)
                   : GridView.builder(
                       padding: const EdgeInsets.all(12),
@@ -262,9 +262,9 @@ class _GalleryScreenState extends State<GalleryScreen> {
                           character: char,
                           allItems: items,
                           index: index,
-                          isBlurred: _blurredItems.contains(item.id),
+                          isBlurred: item.isBlurred,
                           infoLevel: _infoLevel[_sizeIndex],
-                          onToggleBlur: () => _toggleBlur(item.id),
+                          onToggleBlur: () => _toggleBlur(item),
                           onCharacterTap: char != null
                               ? () => Navigator.push(
                                     context,
@@ -285,8 +285,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
     );
   }
 
-  Character? _charForItem(
-      GalleryItem item, List<Character> characters) {
+  CharacterData? _charForItem(
+      GalleryItemData item, List<CharacterData> characters) {
     return characters
         .where((c) => c.id == item.characterId)
         .firstOrNull;
@@ -325,7 +325,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
     );
   }
 
-  void _confirmDelete(BuildContext context, GalleryItem item) {
+  void _confirmDelete(BuildContext context, GalleryItemData item) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -424,10 +424,12 @@ class _FilterChip extends StatelessWidget {
 
 // ── Gallery grid cell ──────────────────────────────────────────────
 
+enum _GalleryCtxAction { copy, setThumbnail }
+
 class _GalleryGridCell extends StatefulWidget {
-  final GalleryItem item;
-  final Character? character;
-  final List<GalleryItem> allItems;
+  final GalleryItemData item;
+  final CharacterData? character;
+  final List<GalleryItemData> allItems;
   final int index;
   final bool isBlurred;
   final int infoLevel; // 0=none,1=name,2=name+filename,3=name+filename+date
@@ -454,6 +456,77 @@ class _GalleryGridCell extends StatefulWidget {
 class _GalleryGridCellState extends State<_GalleryGridCell> {
   bool _hovered = false;
 
+  Future<void> _copyToClipboard() async {
+    try {
+      final bytes = await File(widget.item.filePath(widget.character!.folderPath)).readAsBytes();
+      await Pasteboard.writeImage(bytes);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Image copied to clipboard'),
+          duration: Duration(seconds: 2),
+        ));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _setAsThumbnail() async {
+    if (widget.character == null) return;
+    try {
+      await context.read<CharacterProvider>().updateCharacterThumbnail(
+          widget.character!, widget.item.filePath(widget.character!.folderPath));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Thumbnail updated'),
+          duration: Duration(seconds: 2),
+        ));
+      }
+    } catch (_) {}
+  }
+
+  void _showContextMenu(BuildContext ctx, Offset pos) async {
+    final size = MediaQuery.of(ctx).size;
+    final result = await showMenu<_GalleryCtxAction>(
+      context: ctx,
+      color: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(8),
+        side: const BorderSide(color: AppTheme.borderColor),
+      ),
+      position: RelativeRect.fromLTRB(
+          pos.dx, pos.dy, size.width - pos.dx, size.height - pos.dy),
+      items: [
+        PopupMenuItem(
+          value: _GalleryCtxAction.copy,
+          child: _menuRow(Icons.copy_rounded, 'Copy to clipboard'),
+        ),
+        if (widget.character != null)
+          PopupMenuItem(
+            value: _GalleryCtxAction.setThumbnail,
+            child: _menuRow(Icons.portrait_rounded, 'Set as thumbnail'),
+          ),
+      ],
+    );
+    if (!mounted) return;
+    switch (result) {
+      case _GalleryCtxAction.copy:
+        await _copyToClipboard();
+      case _GalleryCtxAction.setThumbnail:
+        await _setAsThumbnail();
+      case null:
+        break;
+    }
+  }
+
+  Widget _menuRow(IconData icon, String label) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Icon(icon, size: 14, color: AppTheme.textSecondary),
+      const SizedBox(width: 8),
+      Text(label,
+          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+    ],
+  );
+
   void _viewFullscreen() {
     showDialog(
       context: context,
@@ -476,7 +549,10 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
 
   @override
   Widget build(BuildContext context) {
-    final fileExists = File(widget.item.filePath).existsSync();
+    final resolvedPath = widget.character != null
+        ? widget.item.filePath(widget.character!.folderPath)
+        : '';
+    final fileExists = resolvedPath.isNotEmpty && File(resolvedPath).existsSync();
     final raceColor = widget.character != null
         ? AppTheme.raceColor(widget.character!.race)
         : AppTheme.textSecondary;
@@ -486,6 +562,9 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
         onTap: fileExists ? _viewFullscreen : null,
+        onSecondaryTapUp: fileExists
+            ? (d) => _showContextMenu(context, d.globalPosition)
+            : null,
         child: Container(
           decoration: BoxDecoration(
             color: AppTheme.bgSurface,
@@ -514,13 +593,13 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
                                   imageFilter: ImageFilter.blur(
                                       sigmaX: 18, sigmaY: 18),
                                   child: Image.file(
-                                    File(widget.item.filePath),
+                                    File(resolvedPath),
                                     fit: BoxFit.cover,
                                     gaplessPlayback: true,
                                   ),
                                 )
                               : Image.file(
-                                  File(widget.item.filePath),
+                                  File(resolvedPath),
                                   fit: BoxFit.cover,
                                   gaplessPlayback: true,
                                 )
@@ -673,7 +752,7 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
                       if (widget.infoLevel >= 2) ...[
                         const SizedBox(height: 2),
                         Text(
-                          widget.item.filePath.split(r'\').last.split('/').last,
+                          resolvedPath.split(r'\').last.split('/').last,
                           style: const TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 9),
@@ -709,10 +788,10 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
 // ── Full-screen viewer ─────────────────────────────────────────────
 
 class _FullscreenViewer extends StatefulWidget {
-  final List<GalleryItem> items;
+  final List<GalleryItemData> items;
   final int initialIndex;
-  final List<Character> characters;
-  final void Function(Character) onCharacterTap;
+  final List<CharacterData> characters;
+  final void Function(CharacterData) onCharacterTap;
 
   const _FullscreenViewer({
     required this.items,
@@ -742,7 +821,7 @@ class _FullscreenViewerState extends State<_FullscreenViewer> {
     super.dispose();
   }
 
-  Character? get _currentChar {
+  CharacterData? get _currentChar {
     final item = widget.items[_currentIndex];
     return widget.characters
         .where((c) => c.id == item.characterId)
@@ -763,15 +842,21 @@ class _FullscreenViewerState extends State<_FullscreenViewer> {
             controller: _pageCtrl,
             itemCount: widget.items.length,
             onPageChanged: (i) => setState(() => _currentIndex = i),
-            itemBuilder: (_, i) => InteractiveViewer(
-              minScale: 0.5,
-              maxScale: 6,
-              child: Image.file(
-                File(widget.items[i].filePath),
-                fit: BoxFit.contain,
-                gaplessPlayback: true,
-              ),
-            ),
+            itemBuilder: (_, i) {
+              final item = widget.items[i];
+              final char = widget.characters
+                  .where((c) => c.id == item.characterId)
+                  .firstOrNull;
+              return InteractiveViewer(
+                minScale: 0.5,
+                maxScale: 6,
+                child: Image.file(
+                  File(item.filePath(char?.folderPath ?? '')),
+                  fit: BoxFit.contain,
+                  gaplessPlayback: true,
+                ),
+              );
+            },
           ),
           // Close
           Positioned(

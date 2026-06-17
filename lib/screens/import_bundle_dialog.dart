@@ -2,10 +2,9 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/character.dart';
+import '../models/character_data.dart';
 import '../providers/character_provider.dart';
 import '../services/share_service.dart';
-import '../services/file_service.dart';
 import '../theme/app_theme.dart';
 
 /// Show the import preview dialog from a file path.
@@ -71,20 +70,18 @@ class _ImportBundleDialogState extends State<ImportBundleDialog> {
   }
 
   Future<void> _checkConflict() async {
-    final conflict = await FileService.checkFileNameConflict(
-        widget.preview.originalFileName);
-    if (conflict != null && mounted) {
-      // Find owner name
-      final provider = context.read<CharacterProvider>();
-      final ownerName = provider.allCharacters
-          .where((c) =>
-              c.gameFileName == widget.preview.originalFileName ||
-              c.characterFilePath.endsWith(widget.preview.originalFileName))
-          .firstOrNull
-          ?.name;
+    if (!mounted) return;
+    final provider = context.read<CharacterProvider>();
+    final ownerName = provider.allCharacters
+        .where((c) =>
+            c.gameFileName == widget.preview.originalFileName ||
+            (c.characterFilePath?.endsWith(widget.preview.originalFileName) ?? false))
+        .firstOrNull
+        ?.name;
+    if (ownerName != null && mounted) {
       setState(() {
-        _filenameConflict = ownerName ?? 'another character';
-        _renameFile = true; // default to rename
+        _filenameConflict = ownerName;
+        _renameFile = true;
       });
     }
   }

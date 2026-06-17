@@ -1,5 +1,10 @@
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:desktop_drop/desktop_drop.dart';
+import 'package:window_manager/window_manager.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'providers/character_provider.dart';
 import 'screens/home_screen.dart';
@@ -7,46 +12,91 @@ import 'screens/collections_screen.dart';
 import 'screens/applied_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/add_character_screen.dart';
-import 'screens/character_detail_screen.dart';
 import 'screens/gallery_screen.dart';
 import 'screens/import_bundle_dialog.dart';
+import 'screens/migration_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/tags_screen.dart';
-import 'services/hive_service.dart';
+import 'screens/update_check_dialog.dart';
+import 'patch_notes.dart';
+import 'services/app_update_service.dart';
+import 'services/data_service.dart';
+import 'services/migration_service.dart';
 import 'services/share_service.dart';
 import 'theme/app_theme.dart';
-import 'widgets/character_spinner.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'widgets/app_title_bar.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await HiveService.init();
+  await windowManager.ensureInitialized();
 
-  // Load saved accent color
-  final savedAccent = HiveService.staticGetAccentColor();
-  if (savedAccent != null) AppTheme.setAccent(savedAccent);
+  // Hide native title bar; our custom _TitleBar widget replaces it.
+  windowManager.waitUntilReadyToShow(
+    const WindowOptions(titleBarStyle: TitleBarStyle.hidden),
+    () async {
+      await windowManager.show();
+      await windowManager.focus();
+    },
+  );
+
+  final needsMigration = await MigrationService.needsMigration();
+
+  if (!needsMigration) {
+    await _initDataService();
+    final accent = await DataService.instance.getAccentColor();
+    if (accent != null) AppTheme.setAccent(accent);
+  }
 
   runApp(
     ChangeNotifierProvider(
-      create: (_) => CharacterProvider()..loadAll(),
-      child: const PSO2App(),
+      create: (_) => needsMigration
+          ? CharacterProvider()
+          : (CharacterProvider()..loadAll()),
+      child: PSO2App(needsMigration: needsMigration),
     ),
   );
 }
 
-class PSO2App extends StatefulWidget {
-  const PSO2App({super.key});
+/// Initialises DataService, reading save location from the settings file.
+Future<void> _initDataService() async {
+  final docs = await getApplicationDocumentsDirectory();
+  final appRoot = p.join(docs.path, 'PSO2CharacterManager');
+  final settingsFile = File(p.join(appRoot, 'settings.json'));
 
-  // Global key so settings screen can trigger theme rebuild
+  String? saveLocation;
+  if (await settingsFile.exists()) {
+    try {
+      final j = jsonDecode(await settingsFile.readAsString())
+          as Map<String, dynamic>;
+      saveLocation = j['saveLocation'] as String?;
+    } catch (_) {}
+  }
+
+  await DataService.init(saveLocation: saveLocation);
+}
+
+// ── Root app ──────────────────────────────────────────────────────
+
+class PSO2App extends StatefulWidget {
+  final bool needsMigration;
+  const PSO2App({super.key, required this.needsMigration});
+
+  // Notifier so settings screen can trigger theme rebuild
   static final themeNotifier = ValueNotifier<Color>(AppTheme.accent);
+  static final updateNotifier = ValueNotifier<AppUpdateInfo?>(null);
 
   @override
   State<PSO2App> createState() => _PSO2AppState();
 }
 
 class _PSO2AppState extends State<PSO2App> {
+  late bool _showMigration;
+
   @override
   void initState() {
     super.initState();
+    _showMigration = widget.needsMigration;
     PSO2App.themeNotifier.addListener(_onThemeChange);
   }
 
@@ -58,16 +108,33 @@ class _PSO2AppState extends State<PSO2App> {
 
   void _onThemeChange() => setState(() {});
 
+  Future<void> _onMigrationComplete() async {
+    // DataService was initialised by MigrationService.run(); apply accent.
+    final accent = await DataService.instance.getAccentColor();
+    if (accent != null) {
+      AppTheme.setAccent(accent);
+      PSO2App.themeNotifier.value = accent;
+    }
+    if (!mounted) return;
+    // Now it is safe to load all characters.
+    context.read<CharacterProvider>().loadAll();
+    setState(() => _showMigration = false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'PSO2 Character Manager',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const MainShell(),
+      home: _showMigration
+          ? MigrationScreen(onComplete: _onMigrationComplete)
+          : const MainShell(),
     );
   }
 }
+
+// ── Main shell ────────────────────────────────────────────────────
 
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
@@ -88,11 +155,42 @@ class _MainShellState extends State<MainShell> {
     ScanScreen(),
   ];
 
+  @override
+  void initState() {
+    super.initState();
+    AppUpdateService.check()
+        .then((info) => PSO2App.updateNotifier.value = info);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final shownPatchNotes = await _maybeShowPatchNotes();
+      if (!shownPatchNotes) await _maybePromptGameFolder();
+    });
+  }
+
+  Future<bool> _maybeShowPatchNotes() async {
+    final settings = await DataService.instance.getSettings();
+    if (settings.lastSeenVersion == kAppVersion) return false;
+    await DataService.instance.saveLastSeenVersion(kAppVersion);
+    if (!mounted) return false;
+    showPatchNotesDialog(context);  // ignore: use_build_context_synchronously
+    return true;
+  }
+
+  Future<void> _maybePromptGameFolder() async {
+    final settings = await DataService.instance.getSettings();
+    if (settings.gameFolderPromptShown || settings.gameFolderPath != null) {
+      return;
+    }
+    settings.gameFolderPromptShown = true;
+    await DataService.instance.saveSettings(settings);
+    if (!mounted) return;
+    showDialog(context: context, builder: (_) => _GameFolderPromptDialog());  // ignore: use_build_context_synchronously
+  }
+
   Future<void> _handleDroppedFiles(List<String> paths) async {
     for (final path in paths) {
       if (ShareService.isBundlePath(path)) {
         await showImportBundleFromPath(context, path);
-        return; // handle one bundle at a time
+        return;
       }
     }
   }
@@ -101,22 +199,36 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppTheme.bgDark,
-      body: DropTarget(
-        onDragDone: (details) =>
-            _handleDroppedFiles(details.files.map((f) => f.path).toList()),
-        child: Row(
-          children: [
-            _Sidebar(
-              currentIndex: _currentIndex,
-              onSelect: (i) => setState(() => _currentIndex = i),
+      body: Column(
+        children: [
+          const AppTitleBar(),
+          Expanded(
+            child: DropTarget(
+              onDragDone: (details) =>
+                  _handleDroppedFiles(details.files.map((f) => f.path).toList()),
+              child: Row(
+                children: [
+                  _Sidebar(
+                    currentIndex: _currentIndex,
+                    onSelect: (i) => setState(() => _currentIndex = i),
+                  ),
+                  Expanded(
+                    child: IndexedStack(
+                      index: _currentIndex,
+                      children: _screens,
+                    ),
+                  ),
+                ],
+              ),
             ),
-            Expanded(child: _screens[_currentIndex]),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
+
+// ── Sidebar ───────────────────────────────────────────────────────
 
 class _Sidebar extends StatefulWidget {
   final int currentIndex;
@@ -129,208 +241,318 @@ class _Sidebar extends StatefulWidget {
 }
 
 class _SidebarState extends State<_Sidebar> {
-  bool _spinnerLoading = false;
-
-  Future<void> _openSpinner(CharacterProvider provider) async {
-    final characters = provider.allCharacters;
-    if (characters.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Add some characters first!')),
-      );
-      return;
-    }
-    setState(() => _spinnerLoading = true);
-    final winner = await showCharacterSpinner(context, characters);
-    if (mounted) setState(() => _spinnerLoading = false);
-    if (winner != null && mounted) {
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-            builder: (_) => CharacterDetailScreen(character: winner)),
-      );
-    }
-  }
+  bool _collapsed = false;
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<CharacterProvider>(
-      builder: (context, provider, _) {
-        return Container(
-          width: 200,
-          color: AppTheme.bgCard,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ── Logo ──────────────────────────────────────────
-              Container(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-                decoration: const BoxDecoration(
-                  border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
-                ),
-                child: Row(
-                  children: [
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      curve: Curves.easeInOut,
+      width: _collapsed ? 56 : 200,
+      clipBehavior: Clip.hardEdge,
+      decoration: const BoxDecoration(
+        color: AppTheme.bgCard,
+        border: Border(right: BorderSide(color: AppTheme.borderColor)),
+      ),
+      // LayoutBuilder drives layout from actual pixel width so the
+      // content never overflows during the AnimatedContainer transition.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final narrow = constraints.maxWidth < 150;
+          return Consumer<CharacterProvider>(
+            builder: (context, provider, _) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // ── Header ────────────────────────────────────────
+                  if (narrow)
+                    GestureDetector(
+                      onTap: () => setState(() => _collapsed = false),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: const BoxDecoration(
+                          border: Border(
+                              bottom:
+                                  BorderSide(color: AppTheme.borderColor)),
+                        ),
+                        child: Column(
+                          children: [
+                            Container(
+                              width: 28,
+                              height: 28,
+                              decoration: BoxDecoration(
+                                color:
+                                    AppTheme.accent.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(
+                                    color: AppTheme.accent
+                                        .withValues(alpha: 0.4)),
+                              ),
+                              child: Icon(Icons.person,
+                                  color: AppTheme.accent, size: 16),
+                            ),
+                            const SizedBox(height: 5),
+                            const Icon(Icons.chevron_right_rounded,
+                                color: AppTheme.textSecondary, size: 14),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
                     Container(
-                      width: 28,
-                      height: 28,
-                      decoration: BoxDecoration(
-                        color: AppTheme.accent,
-                        borderRadius: BorderRadius.circular(6),
+                      padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
+                      decoration: const BoxDecoration(
+                        border: Border(
+                            bottom:
+                                BorderSide(color: AppTheme.borderColor)),
                       ),
-                      child: const Icon(Icons.person, color: AppTheme.bgDark, size: 16),
-                    ),
-                    const SizedBox(width: 10),
-                    const Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('PSO2 Character Manager',
-                            style: TextStyle(
-                                color: AppTheme.textPrimary,
-                                fontSize: 8,
-                                fontWeight: FontWeight.w500)),
-                        Text('v1.2.0',
-                            style: TextStyle(
-                                color: AppTheme.textSecondary, fontSize: 10)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 8),
-              _sectionLabel('Library'),
-
-              _NavItem(
-                icon: Icons.grid_view_rounded,
-                label: 'All characters',
-                badge: '${provider.allCharacters.length}',
-                selected: widget.currentIndex == 0,
-                onTap: () => widget.onSelect(0),
-              ),
-              _NavItem(
-                icon: Icons.folder_rounded,
-                label: 'Collections',
-                badge: '${provider.allCollections.length}',
-                selected: widget.currentIndex == 1,
-                onTap: () => widget.onSelect(1),
-              ),
-              _NavItem(
-                icon: Icons.check_circle_outline_rounded,
-                label: 'Applied to game',
-                badge: '${provider.appliedCount}',
-                selected: widget.currentIndex == 2,
-                onTap: () => widget.onSelect(2),
-              ),
-              _NavItem(
-                icon: Icons.photo_library_outlined,
-                label: 'Gallery',
-                badge: provider.getAllGalleryItems().isNotEmpty
-                    ? '${provider.getAllGalleryItems().length}'
-                    : null,
-                selected: widget.currentIndex == 3,
-                onTap: () => widget.onSelect(3),
-              ),
-              _NavItem(
-                icon: Icons.label_rounded,
-                label: 'Tags',
-                badge: provider.allTags.isNotEmpty
-                    ? '${provider.allTags.length}'
-                    : null,
-                selected: widget.currentIndex == 4,
-                onTap: () => widget.onSelect(4),
-              ),
-              _NavItem(
-                icon: Icons.radar_rounded,
-                label: 'Scan folder',
-                selected: widget.currentIndex == 5,
-                onTap: () => widget.onSelect(5),
-              ),
-
-              const Spacer(),
-
-              // ── Character slots ────────────────────────────────
-              _sectionLabel('Character slots'),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          '${provider.appliedCount} / 50',
-                          style: TextStyle(
-                              color: provider.appliedCount > 50
-                                  ? Colors.red
-                                  : AppTheme.accent,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500),
-                        ),
-                        Text(
-                          provider.appliedCount > 50
-                              ? 'over limit!'
-                              : 'slots used',
-                          style: TextStyle(
-                              color: provider.appliedCount > 50
-                                  ? Colors.red.withOpacity(0.8)
-                                  : AppTheme.textSecondary,
-                              fontSize: 10),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(2),
-                      child: LinearProgressIndicator(
-                        value: (provider.appliedCount / 50).clamp(0.0, 1.0),
-                        backgroundColor: AppTheme.bgSurface,
-                        valueColor: AlwaysStoppedAnimation(
-                          provider.appliedCount > 50
-                              ? Colors.red
-                              : AppTheme.accent,
-                        ),
-                        minHeight: 4,
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 26,
+                            height: 26,
+                            decoration: BoxDecoration(
+                              color:
+                                  AppTheme.accent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                  color:
+                                      AppTheme.accent.withValues(alpha: 0.4)),
+                            ),
+                            child: Icon(Icons.person,
+                                color: AppTheme.accent, size: 15),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text('Character Manager',
+                                    style: TextStyle(
+                                        color: AppTheme.textPrimary,
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.1)),
+                                ValueListenableBuilder<AppUpdateInfo?>(
+                                  valueListenable: PSO2App.updateNotifier,
+                                  builder: (_, update, child) {
+                                    if (update == null) {
+                                      return const Text('v$kAppVersion',
+                                          style: TextStyle(
+                                              color: AppTheme.textSecondary,
+                                              fontSize: 10));
+                                    }
+                                    return GestureDetector(
+                                      onTap: () => launchUrl(
+                                          Uri.parse(update.url),
+                                          mode: LaunchMode.externalApplication),
+                                      child: Tooltip(
+                                        message:
+                                            'v${update.version} available — click to download',
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Text('v$kAppVersion',
+                                                style: const TextStyle(
+                                                    color:
+                                                        AppTheme.textSecondary,
+                                                    fontSize: 10)),
+                                            const SizedBox(width: 4),
+                                            Container(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                      horizontal: 4,
+                                                      vertical: 1),
+                                              decoration: BoxDecoration(
+                                                color: AppTheme.accentGold
+                                                    .withValues(alpha: 0.2),
+                                                borderRadius:
+                                                    BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                'v${update.version}',
+                                                style: const TextStyle(
+                                                    color: AppTheme.accentGold,
+                                                    fontSize: 9,
+                                                    fontWeight:
+                                                        FontWeight.w600),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () =>
+                                setState(() => _collapsed = true),
+                            child: const SizedBox(
+                              width: 26,
+                              height: 26,
+                              child: Icon(Icons.chevron_left_rounded,
+                                  color: AppTheme.textSecondary, size: 16),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+
+                  if (!narrow) const SizedBox(height: 8),
+                  if (!narrow) _sectionLabel('Library'),
+
+                  _NavItem(
+                    icon: Icons.grid_view_rounded,
+                    label: 'All characters',
+                    badge: '${provider.allCharacters.length}',
+                    selected: widget.currentIndex == 0,
+                    onTap: () => widget.onSelect(0),
+                    collapsed: narrow,
+                  ),
+                  _NavItem(
+                    icon: Icons.folder_rounded,
+                    label: 'Collections',
+                    badge: '${provider.allCollections.length}',
+                    selected: widget.currentIndex == 1,
+                    onTap: () => widget.onSelect(1),
+                    collapsed: narrow,
+                  ),
+                  _NavItem(
+                    icon: Icons.check_circle_outline_rounded,
+                    label: 'Applied to game',
+                    badge: '${provider.appliedCount}',
+                    selected: widget.currentIndex == 2,
+                    onTap: () => widget.onSelect(2),
+                    collapsed: narrow,
+                  ),
+                  _NavItem(
+                    icon: Icons.photo_library_outlined,
+                    label: 'Gallery',
+                    badge: provider.getAllGalleryItems().isNotEmpty
+                        ? '${provider.getAllGalleryItems().length}'
+                        : null,
+                    selected: widget.currentIndex == 3,
+                    onTap: () => widget.onSelect(3),
+                    collapsed: narrow,
+                  ),
+                  _NavItem(
+                    icon: Icons.label_rounded,
+                    label: 'Tags',
+                    badge: provider.allTags.isNotEmpty
+                        ? '${provider.allTags.length}'
+                        : null,
+                    selected: widget.currentIndex == 4,
+                    onTap: () => widget.onSelect(4),
+                    collapsed: narrow,
+                  ),
+                  _NavItem(
+                    icon: Icons.radar_rounded,
+                    label: 'Scan folder',
+                    selected: widget.currentIndex == 5,
+                    onTap: () => widget.onSelect(5),
+                    collapsed: narrow,
+                  ),
+                  _UpdatesNavItem(
+                      updateCount: provider.totalUpdatesCount,
+                      collapsed: narrow),
+
+                  const Spacer(),
+
+                  if (!narrow) ...[
+                    // ── Applied count ────────────────────────────────
+                    _sectionLabel('Applied'),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+                      child: Row(
+                        children: [
+                          Text(
+                            '${provider.appliedCount}',
+                            style: TextStyle(
+                                color: AppTheme.accent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w500),
+                          ),
+                          const SizedBox(width: 4),
+                          const Text(
+                            'characters applied',
+                            style: TextStyle(
+                                color: AppTheme.textSecondary,
+                                fontSize: 10),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _sectionLabel('App'),
                   ],
-                ),
-              ),
 
-              // ── App section ──────────────────────────────────────
-              _sectionLabel('App'),
-              _NavItem(
-                icon: Icons.settings_outlined,
-                label: 'Settings',
-                selected: false,
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
-                ),
-              ),
-
-              Padding(
-                padding: const EdgeInsets.all(10),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => Navigator.push(
+                  _NavItem(
+                    icon: Icons.settings_outlined,
+                    label: 'Settings',
+                    selected: false,
+                    collapsed: narrow,
+                    onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                          builder: (_) => const AddCharacterScreen()),
-                    ),
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add character'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      textStyle: const TextStyle(fontSize: 13),
+                          builder: (_) => const SettingsScreen()),
                     ),
                   ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+
+                  if (narrow)
+                    Tooltip(
+                      message: 'Add character',
+                      preferBelow: false,
+                      child: GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) =>
+                                  const AddCharacterScreen()),
+                        ),
+                        child: Container(
+                          margin: const EdgeInsets.all(8),
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: AppTheme.accent,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Center(
+                            child: Icon(Icons.add,
+                                color: AppTheme.bgDark, size: 18),
+                          ),
+                        ),
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.all(10),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) =>
+                                    const AddCharacterScreen()),
+                          ),
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('Add character'),
+                          style: ElevatedButton.styleFrom(
+                            padding:
+                                const EdgeInsets.symmetric(vertical: 10),
+                            textStyle: const TextStyle(fontSize: 13),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          );
+        },
+      ),
     );
   }
 
@@ -349,12 +571,131 @@ class _SidebarState extends State<_Sidebar> {
   }
 }
 
+// ── Updates nav item ──────────────────────────────────────────────
+
+class _UpdatesNavItem extends StatelessWidget {
+  final int updateCount;
+  final bool collapsed;
+  const _UpdatesNavItem(
+      {required this.updateCount, this.collapsed = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUpdates = updateCount > 0;
+    void openDialog() => showDialog(
+          context: context,
+          builder: (_) => const UpdateCheckDialog(),
+        );
+
+    if (collapsed) {
+      return Tooltip(
+        message: hasUpdates
+            ? 'Sync from game ($updateCount)'
+            : 'Sync from game',
+        preferBelow: false,
+        waitDuration: const Duration(milliseconds: 400),
+        child: GestureDetector(
+          onTap: openDialog,
+          child: Container(
+            height: 36,
+            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: hasUpdates
+                  ? AppTheme.accentGold.withValues(alpha: 0.08)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Stack(
+              children: [
+                Center(
+                  child: Icon(Icons.sync_rounded,
+                      size: 16,
+                      color: hasUpdates
+                          ? AppTheme.accentGold
+                          : AppTheme.textSecondary),
+                ),
+                if (hasUpdates)
+                  Positioned(
+                    right: 10,
+                    top: 8,
+                    child: Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: AppTheme.accentGold,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: openDialog,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+        decoration: BoxDecoration(
+          color: hasUpdates
+              ? AppTheme.accentGold.withValues(alpha: 0.08)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.sync_rounded,
+                size: 15,
+                color: hasUpdates
+                    ? AppTheme.accentGold
+                    : AppTheme.textSecondary),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Sync from game',
+                style: TextStyle(
+                  color: hasUpdates
+                      ? AppTheme.accentGold
+                      : AppTheme.textSecondary,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+            if (hasUpdates)
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentGold.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  '$updateCount',
+                  style: const TextStyle(
+                      color: AppTheme.accentGold,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Nav item ──────────────────────────────────────────────────────
+
 class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final String? badge;
   final bool selected;
   final VoidCallback onTap;
+  final bool collapsed;
 
   const _NavItem({
     required this.icon,
@@ -362,52 +703,158 @@ class _NavItem extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.badge,
+    this.collapsed = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    if (collapsed) {
+      return Tooltip(
+        message: badge != null ? '$label ($badge)' : label,
+        preferBelow: false,
+        waitDuration: const Duration(milliseconds: 400),
+        child: GestureDetector(
+          onTap: onTap,
+          child: Container(
+            height: 36,
+            margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+            decoration: BoxDecoration(
+              color: selected
+                  ? AppTheme.accent.withValues(alpha: 0.12)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Center(
+              child: Icon(icon,
+                  size: 16,
+                  color: selected
+                      ? AppTheme.accent
+                      : AppTheme.textSecondary),
+            ),
+          ),
+        ),
+      );
+    }
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? AppTheme.accent.withOpacity(0.12) : Colors.transparent,
+          color: selected
+              ? AppTheme.accent.withValues(alpha: 0.12)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(6),
         ),
         child: Row(
           children: [
             Icon(icon,
                 size: 15,
-                color: selected ? AppTheme.accent : AppTheme.textSecondary),
+                color: selected
+                    ? AppTheme.accent
+                    : AppTheme.textSecondary),
             const SizedBox(width: 8),
             Expanded(
               child: Text(
                 label,
                 style: TextStyle(
-                  color: selected ? AppTheme.accent : AppTheme.textSecondary,
+                  color:
+                      selected ? AppTheme.accent : AppTheme.textSecondary,
                   fontSize: 13,
                 ),
               ),
             ),
             if (badge != null)
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 6, vertical: 1),
                 decoration: BoxDecoration(
                   color: selected
-                      ? AppTheme.accent.withOpacity(0.2)
+                      ? AppTheme.accent.withValues(alpha: 0.2)
                       : AppTheme.bgSurface,
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
                   badge!,
                   style: TextStyle(
-                    color: selected ? AppTheme.accent : AppTheme.textSecondary,
+                    color: selected
+                        ? AppTheme.accent
+                        : AppTheme.textSecondary,
                     fontSize: 10,
                   ),
                 ),
               ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── First-run game folder prompt ──────────────────────────────────
+
+class _GameFolderPromptDialog extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: SizedBox(
+        width: 400,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.sports_esports_outlined,
+                      size: 20, color: AppTheme.accent),
+                  const SizedBox(width: 10),
+                  const Text(
+                    'Set up game folder',
+                    style: TextStyle(
+                        color: AppTheme.textPrimary,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              const Text(
+                'Point the app to your PSO2 character data folder to enable '
+                'Apply to game, Scan folder, and Sync from game features.',
+                style: TextStyle(
+                    color: AppTheme.textSecondary, fontSize: 13),
+              ),
+              const SizedBox(height: 22),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: TextButton.styleFrom(
+                        foregroundColor: AppTheme.textSecondary),
+                    child: const Text('Skip'),
+                  ),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const SettingsScreen()),
+                      );
+                    },
+                    child: const Text('Open Settings'),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );

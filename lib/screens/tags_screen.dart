@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/tag.dart';
+import '../models/tag_data.dart';
 import '../providers/character_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/tag_chip.dart';
@@ -205,7 +205,7 @@ class _TagsScreenState extends State<TagsScreen> {
   }
 
   Widget _buildGrid(
-      BuildContext context, CharacterProvider provider, List<Tag> tags) {
+      BuildContext context, CharacterProvider provider, List<TagData> tags) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -306,7 +306,7 @@ class _TagsScreenState extends State<TagsScreen> {
   void _showTagDialog(
     BuildContext context,
     CharacterProvider provider, {
-    Tag? tag,
+    TagData? tag,
   }) {
     showDialog(
       context: context,
@@ -317,7 +317,7 @@ class _TagsScreenState extends State<TagsScreen> {
   void _confirmDelete(
     BuildContext context,
     CharacterProvider provider,
-    Tag tag,
+    TagData tag,
   ) {
     final count = provider.tagUsageCount(tag.id);
     showDialog(
@@ -425,7 +425,7 @@ class _StatCard extends StatelessWidget {
 // ── Tag card ───────────────────────────────────────────────────────
 
 class _TagCard extends StatefulWidget {
-  final Tag tag;
+  final TagData tag;
   final int usageCount;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -574,7 +574,7 @@ class _TagCardState extends State<_TagCard> {
 // ── Create / edit tag dialog ───────────────────────────────────────
 
 class _TagDialog extends StatefulWidget {
-  final Tag? tag;
+  final TagData? tag;
   final CharacterProvider provider;
 
   const _TagDialog({this.tag, required this.provider});

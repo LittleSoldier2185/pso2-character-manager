@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
-import '../models/character.dart';
+import '../models/character_data.dart';
 import '../providers/character_provider.dart';
 import '../theme/app_theme.dart';
 import '../widgets/tag_chip.dart';
@@ -57,8 +57,8 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
   }
 
   void _setCharFile(String path) {
-    if (!Character.isValidExtension(path)) return;
-    final raceGender = Character.detectRaceGender(path);
+    if (!CharacterData.isValidExtension(path)) return;
+    final raceGender = CharacterData.detectRaceGender(path);
     setState(() {
       _selectedCharFilePath = path;
       _detectedRace = raceGender['race'];
@@ -73,7 +73,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
   Future<void> _pickCharacterFile() async {
     final result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
-      allowedExtensions: Character.validExtensions,
+      allowedExtensions: CharacterData.validExtensions,
       dialogTitle: 'Add Character File',
     );
     if (result != null && result.files.single.path != null) {
