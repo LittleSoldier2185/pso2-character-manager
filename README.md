@@ -1,12 +1,8 @@
 # PSO2 Character Manager
 
-PSO2's salon mode only shows 50 character files at a time. This app gives you an unlimited local library to store, organize, and manage all your PSO2 character data files outside the game.
-=======
-> ⚠️ **This is a first version.** The app is functional but still in early development. Features may change, and bugs may be present. Feedback and contributions are welcome!
-
 A Windows desktop app built with Flutter for managing Phantasy Star Online 2 character data files locally.
 
-PSO2's salon mode can only display 50 character files at a time. This app acts as an unlimited local library to store, organize, and search your character data outside the game.
+Store, organize, and manage an unlimited number of PSO2 character data files outside the game.
 
 ---
 
@@ -34,9 +30,8 @@ PSO2's salon mode can only display 50 character files at a time. This app acts a
 - Export/share character file to any folder
 
 **Apply to game**
-- Apply up to 50 characters to your PSO2 game folder with one click
-- Slot number tracking (Slot 1–50)
-- Applied screen shows all currently active characters with a slot progress bar
+- Apply unlimited characters to your PSO2 game folder with one click
+- Applied screen shows all currently active characters
 - Toggle apply/unapply directly from the character card or detail page
 
 **Collections**
