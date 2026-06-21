@@ -31,7 +31,7 @@ Section headers are ALL CAPS (e.g. `BUG FIX`, `IMPROVEMENT`, `NEW FEATURE`).
 Bullets bold up to the em-dash automatically — keep the `—` separator.
 
 ### 3 — RELEASE_vX.Y.Z.txt
-Create in project root. Format mirrors the existing RELEASE files:
+Create in project root. Exact format:
 
 ```
 PSO2 Character Manager vX.Y.Z
@@ -39,7 +39,50 @@ PSO2 Character Manager vX.Y.Z
 
 <SECTION HEADER>
 
-• <same bullets as patch note>
+• <feature name> — <what it does, one or two sentences. Plain English,
+  no jargon. Focus on what the user sees or gains, not implementation.>
+• <next bullet if any>
+```
+
+Rules:
+- Line 1: always `PSO2 Character Manager vX.Y.Z` (no extra punctuation)
+- Line 2: short title matching the patch note title (e.g. `Bug fix`, `Manual download option`)
+- Line 3: blank
+- Line 4: section header ALL CAPS — use one of:
+  - `BUG FIX` / `BUG FIXES` — something broken now works
+  - `IMPROVEMENT` / `IMPROVEMENTS` — existing feature made better
+  - `NEW FEATURE` — brand new capability
+  - For big releases with multiple sections, use multiple headers with a blank line between sections
+- Line 5: blank
+- Bullets: `•` space feature name (bold in app via em-dash) ` — ` description
+  - Feature name: concise noun phrase (e.g. `Auto-updater`, `Manual download`)
+  - Description: what changed from the user's perspective, not how
+  - Wrap long lines at ~70 chars with 2-space indent for continuation
+- End file with a single trailing newline
+
+Example (bug fix):
+```
+PSO2 Character Manager v1.4.1
+Bug fix
+
+BUG FIXES
+
+• Auto-updater — the app now reopens automatically after a successful
+  update instead of silently stopping mid-install.
+• Version number — now shows the correct version after an update instead
+  of continuing to display the old version number.
+```
+
+Example (improvement):
+```
+PSO2 Character Manager v1.4.2
+Manual download option
+
+IMPROVEMENT
+
+• Manual download — when a new version is available, you can now choose
+  between updating automatically or opening the GitHub release page to
+  download and install manually.
 ```
 
 ### 4 — Bump pubspec.yaml
