@@ -12,6 +12,13 @@ class _PatchEntry {
 }
 
 const _entries = [
+  _PatchEntry('1.4.3', 'Auto-updater reliability fix', '''
+BUG FIX
+
+• Auto-updater — switched from a PowerShell script to a batch file for
+  the install step, which is more reliable on end-user machines.
+  The app now consistently relaunches after a successful update.
+'''),
   _PatchEntry('1.4.2', 'Manual download option', '''
 IMPROVEMENT
 
