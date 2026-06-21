@@ -12,6 +12,13 @@ class _PatchEntry {
 }
 
 const _entries = [
+  _PatchEntry('1.4.2', 'Manual download option', '''
+IMPROVEMENT
+
+• Manual download — when a new version is available, you can now choose
+  between updating automatically or opening the GitHub release page to
+  download and install manually.
+'''),
   _PatchEntry('1.4.1', 'Bug fix', '''
 BUG FIXES
 

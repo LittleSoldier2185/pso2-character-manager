@@ -380,10 +380,10 @@ class _SidebarState extends State<_Sidebar> {
                                               fontSize: 10));
                                     }
                                     return GestureDetector(
-                                      onTap: () => AppUpdater.installWithProgress(context, update),
+                                      onTap: () => AppUpdater.showUpdateOptions(context, update),
                                       child: Tooltip(
                                         message:
-                                            'v${update.version} available — click to download',
+                                            'v${update.version} available — click to update',
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
                                           children: [

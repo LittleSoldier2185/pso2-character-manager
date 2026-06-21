@@ -9,6 +9,69 @@ import '../theme/app_theme.dart';
 import 'app_update_service.dart';
 
 class AppUpdater {
+  static Future<void> showUpdateOptions(BuildContext context, AppUpdateInfo info) async {
+    final go = await showDialog<bool>(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: AppTheme.bgCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: SizedBox(
+          width: 360,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(children: [
+                  Icon(Icons.system_update_alt_rounded, size: 18, color: AppTheme.accentGold),
+                  const SizedBox(width: 8),
+                  Text('v${info.version} available',
+                      style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500)),
+                ]),
+                const SizedBox(height: 20),
+                ElevatedButton.icon(
+                  onPressed: () => Navigator.pop(context, true),
+                  icon: const Icon(Icons.download_rounded, size: 14),
+                  label: const Text('Update automatically'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accentGold,
+                    foregroundColor: AppTheme.bgDark,
+                    textStyle: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context, false);
+                    launchUrl(Uri.parse(info.url), mode: LaunchMode.externalApplication);
+                  },
+                  icon: const Icon(Icons.open_in_browser_rounded, size: 14),
+                  label: const Text('Download manually'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.textPrimary,
+                    side: BorderSide(color: AppTheme.borderColor),
+                    textStyle: const TextStyle(fontSize: 13),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                TextButton(
+                  onPressed: () => Navigator.pop(context, false),
+                  style: TextButton.styleFrom(foregroundColor: AppTheme.textSecondary),
+                  child: const Text('Later'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    if (go == true && context.mounted) installWithProgress(context, info);
+  }
+
   static Future<void> installWithProgress(BuildContext context, AppUpdateInfo info) async {
     if (info.downloadUrl == null) {
       launchUrl(Uri.parse(info.url), mode: LaunchMode.externalApplication);
