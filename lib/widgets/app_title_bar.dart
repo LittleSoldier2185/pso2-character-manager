@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
+import '../main.dart';
 import '../patch_notes.dart';
 import '../services/app_update_service.dart';
 import '../theme/app_theme.dart';
@@ -22,10 +23,14 @@ class _AppTitleBarState extends State<AppTitleBar> with WindowListener {
     super.initState();
     windowManager.addListener(this);
     _syncMaximized();
+    PSO2App.bgNotifier.addListener(_onBgChange);
   }
+
+  void _onBgChange() { if (mounted) setState(() {}); }
 
   @override
   void dispose() {
+    PSO2App.bgNotifier.removeListener(_onBgChange);
     windowManager.removeListener(this);
     super.dispose();
   }
@@ -44,7 +49,7 @@ class _AppTitleBarState extends State<AppTitleBar> with WindowListener {
   Widget build(BuildContext context) {
     return Container(
       height: 36,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppTheme.bgDark,
         border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
       ),
@@ -53,8 +58,8 @@ class _AppTitleBarState extends State<AppTitleBar> with WindowListener {
           // Drag area + branding
           Expanded(
             child: DragToMoveArea(
-              child: const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 14),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: Text(
                   'PSO2 Character Manager',
                   style: TextStyle(
@@ -69,7 +74,7 @@ class _AppTitleBarState extends State<AppTitleBar> with WindowListener {
           ),
           // Patch notes
           Tooltip(
-            message: "What's new in v$kAppVersion",
+            message: 'Patch notes',
             preferBelow: true,
             child: _WinBtn(
               icon: Icons.article_outlined,

@@ -298,7 +298,7 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
     return AlertDialog(
       backgroundColor: AppTheme.bgCard,
       title: Text(widget.title,
-          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 15)),
+          style: TextStyle(color: AppTheme.textPrimary, fontSize: 15)),
       content: SizedBox(
         width: 340,
         child: SingleChildScrollView(
@@ -334,14 +334,14 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
                       FilteringTextInputFormatter.allow(RegExp(r'[#0-9a-fA-F]')),
                       LengthLimitingTextInputFormatter(7),
                     ],
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 13,
                         fontFamily: 'monospace'),
                     decoration: InputDecoration(
                       isDense: true,
                       prefixText: _hexCtrl.text.startsWith('#') ? '' : '# ',
-                      prefixStyle: const TextStyle(
+                      prefixStyle: TextStyle(
                           color: AppTheme.textSecondary, fontSize: 13),
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 10, vertical: 10),
@@ -350,11 +350,11 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
                       errorText: _hexError ? 'Invalid hex' : null,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.borderColor),
+                        borderSide: BorderSide(color: AppTheme.borderColor),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
-                        borderSide: const BorderSide(color: AppTheme.borderColor),
+                        borderSide: BorderSide(color: AppTheme.borderColor),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(8),
@@ -366,7 +366,7 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
               ]),
               const SizedBox(height: 16),
               // ── Presets ──
-              const Text('Quick presets',
+              Text('Quick presets',
                   style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 11,
@@ -399,7 +399,7 @@ class _ColorPickerDialogState extends State<_ColorPickerDialog> {
               const SizedBox(height: 14),
               // ── Preview chip ──
               Row(children: [
-                const Text('Preview: ',
+                Text('Preview: ',
                     style: TextStyle(
                         color: AppTheme.textSecondary, fontSize: 12)),
                 AnimatedContainer(

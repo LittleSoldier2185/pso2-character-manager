@@ -138,7 +138,7 @@ class _ExportBundleDialogState extends State<ExportBundleDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(widget.character.name,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: AppTheme.textPrimary,
                                 fontSize: 13,
                                 fontWeight: FontWeight.w500)),
@@ -189,14 +189,14 @@ class _ExportBundleDialogState extends State<ExportBundleDialog> {
             // Size estimate
             Row(
               children: [
-                const Icon(Icons.folder_outlined,
+                Icon(Icons.folder_outlined,
                     size: 13, color: AppTheme.textSecondary),
                 const SizedBox(width: 5),
                 Text(
                   _estimatedSize != null
                       ? 'Estimated size: ${_formatSize(_estimatedSize!)}'
                       : 'Calculating size…',
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textSecondary, fontSize: 12),
                 ),
               ],
@@ -250,10 +250,10 @@ class _ToggleRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(label,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary, fontSize: 13)),
                 Text(subtitle,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textSecondary, fontSize: 11)),
               ],
             ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../main.dart';
 import '../models/tag_data.dart';
 import '../providers/character_provider.dart';
 import '../theme/app_theme.dart';
@@ -52,7 +53,7 @@ class _TagsScreenState extends State<TagsScreen> {
             // ── Top bar ──────────────────────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppTheme.bgCard,
                 border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
               ),
@@ -61,7 +62,7 @@ class _TagsScreenState extends State<TagsScreen> {
                   if (canPop) ...[
                     IconButton(
                       onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.arrow_back_rounded,
+                      icon: Icon(Icons.arrow_back_rounded,
                           size: 18, color: AppTheme.textSecondary),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -69,7 +70,7 @@ class _TagsScreenState extends State<TagsScreen> {
                     ),
                     const SizedBox(width: 12),
                   ],
-                  const Icon(Icons.label_rounded,
+                  Icon(Icons.label_rounded,
                       size: 16, color: AppTheme.textSecondary),
                   const SizedBox(width: 8),
                   Text(
@@ -78,7 +79,7 @@ class _TagsScreenState extends State<TagsScreen> {
                         : provider.allTags.isEmpty
                             ? 'Tags'
                             : '${provider.allTags.length} tag${provider.allTags.length == 1 ? '' : 's'}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 14,
                         fontWeight: FontWeight.w500),
@@ -90,7 +91,7 @@ class _TagsScreenState extends State<TagsScreen> {
                       onChanged: (v) => setState(() => _search = v),
                       decoration: InputDecoration(
                         hintText: 'Search tags…',
-                        prefixIcon: const Icon(Icons.search_rounded,
+                        prefixIcon: Icon(Icons.search_rounded,
                             size: 15, color: AppTheme.textSecondary),
                         suffixIcon: _search.isNotEmpty
                             ? IconButton(
@@ -102,7 +103,7 @@ class _TagsScreenState extends State<TagsScreen> {
                             const EdgeInsets.symmetric(vertical: 8),
                         isDense: true,
                       ),
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary, fontSize: 12),
                     ),
                   ),
@@ -118,7 +119,7 @@ class _TagsScreenState extends State<TagsScreen> {
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
-                      side: const BorderSide(color: AppTheme.borderColor),
+                      side: BorderSide(color: AppTheme.borderColor),
                     ),
                     onSelected: (opt) => setState(() => _sort = opt),
                     itemBuilder: (_) => _TagSortOption.values
@@ -191,7 +192,7 @@ class _TagsScreenState extends State<TagsScreen> {
           const SizedBox(height: 16),
           Text(
             'No tags match "$_search"',
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppTheme.textSecondary, fontSize: 14),
           ),
           const SizedBox(height: 8),
@@ -206,32 +207,38 @@ class _TagsScreenState extends State<TagsScreen> {
 
   Widget _buildGrid(
       BuildContext context, CharacterProvider provider, List<TagData> tags) {
+    final allTags = provider.allTags;
+    final unusedTags =
+        allTags.where((t) => provider.tagUsageCount(t.id) == 0).toList();
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ── Stats row ──────────────────────────────────────────
+          // ── Stats row (always global counts, unaffected by search) ──
           Row(
             children: [
               _StatCard(
                 label: 'Total tags',
-                value: '${tags.length}',
+                value: '${allTags.length}',
                 icon: Icons.label_rounded,
               ),
               const SizedBox(width: 12),
               _StatCard(
                 label: 'In use',
                 value:
-                    '${tags.where((t) => provider.tagUsageCount(t.id) > 0).length}',
+                    '${allTags.where((t) => provider.tagUsageCount(t.id) > 0).length}',
                 icon: Icons.link_rounded,
               ),
               const SizedBox(width: 12),
               _StatCard(
                 label: 'Unused',
-                value:
-                    '${tags.where((t) => provider.tagUsageCount(t.id) == 0).length}',
+                value: '${unusedTags.length}',
                 icon: Icons.link_off_rounded,
+                onDelete: unusedTags.isNotEmpty
+                    ? () => _deleteAllUnused(context, provider, unusedTags)
+                    : null,
               ),
             ],
           ),
@@ -245,23 +252,65 @@ class _TagsScreenState extends State<TagsScreen> {
               spacing: 12,
               runSpacing: 12,
               children: tags
-                  .map((tag) => SizedBox(
-                        width: itemWidth,
-                        child: _TagCard(
-                          tag: tag,
-                          usageCount: provider.tagUsageCount(tag.id),
-                          onEdit: () =>
-                              _showTagDialog(context, provider, tag: tag),
-                          onDelete: () =>
-                              _confirmDelete(context, provider, tag),
-                        ),
-                      ))
+                  .map((tag) {
+                    final count = provider.tagUsageCount(tag.id);
+                    return SizedBox(
+                      width: itemWidth,
+                      child: _TagCard(
+                        tag: tag,
+                        usageCount: count,
+                        onEdit: () =>
+                            _showTagDialog(context, provider, tag: tag),
+                        onDelete: () =>
+                            _confirmDelete(context, provider, tag),
+                        onTap: count > 0
+                            ? () {
+                                provider.toggleFilterTag(tag.id);
+                                MainShell.switchTabNotifier.value = 0;
+                              }
+                            : null,
+                      ),
+                    );
+                  })
                   .toList(),
             );
           }),
         ],
       ),
     );
+  }
+
+  Future<void> _deleteAllUnused(
+    BuildContext context,
+    CharacterProvider provider,
+    List<TagData> unused,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: const Text('Delete all unused tags?'),
+        content: Text(
+          'Permanently delete ${unused.length} unused tag${unused.length == 1 ? '' : 's'}.',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete all'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      for (final tag in unused) {
+        await provider.deleteTag(tag);
+      }
+    }
   }
 
   Widget _buildEmpty(BuildContext context, CharacterProvider provider) {
@@ -281,13 +330,13 @@ class _TagsScreenState extends State<TagsScreen> {
                 size: 36, color: AppTheme.textSecondary.withOpacity(0.4)),
           ),
           const SizedBox(height: 20),
-          const Text('No tags yet',
+          Text('No tags yet',
               style: TextStyle(
                   color: AppTheme.textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.w500)),
           const SizedBox(height: 8),
-          const Text('Create tags to organise your characters.',
+          Text('Create tags to organise your characters.',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
           const SizedBox(height: 24),
           ElevatedButton.icon(
@@ -341,7 +390,7 @@ class _TagsScreenState extends State<TagsScreen> {
                 ),
                 const SizedBox(width: 8),
                 Text('"${tag.name}"',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontWeight: FontWeight.w500)),
               ],
@@ -353,7 +402,7 @@ class _TagsScreenState extends State<TagsScreen> {
                       'It will be removed from all of them.'
                   : 'This tag is not used by any characters.',
               style:
-                  const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
           ],
         ),
@@ -381,11 +430,13 @@ class _StatCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
+  final VoidCallback? onDelete;
 
   const _StatCard({
     required this.label,
     required this.value,
     required this.icon,
+    this.onDelete,
   });
 
   @override
@@ -402,19 +453,34 @@ class _StatCard extends StatelessWidget {
           children: [
             Icon(icon, size: 16, color: AppTheme.accent.withOpacity(0.7)),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(value,
-                    style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600)),
-                Text(label,
-                    style: const TextStyle(
-                        color: AppTheme.textSecondary, fontSize: 11)),
-              ],
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(value,
+                      style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w600)),
+                  Text(label,
+                      style: TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 11)),
+                ],
+              ),
             ),
+            if (onDelete != null)
+              GestureDetector(
+                onTap: onDelete,
+                child: Tooltip(
+                  message: 'Delete all unused',
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.delete_sweep_outlined,
+                        size: 15,
+                        color: Colors.redAccent.withOpacity(0.7)),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -429,12 +495,14 @@ class _TagCard extends StatefulWidget {
   final int usageCount;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback? onTap;
 
   const _TagCard({
     required this.tag,
     required this.usageCount,
     required this.onEdit,
     required this.onDelete,
+    this.onTap,
   });
 
   @override
@@ -452,7 +520,12 @@ class _TagCardState extends State<_TagCard> {
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
-      child: AnimatedContainer(
+      cursor: widget.onTap != null
+          ? SystemMouseCursors.click
+          : MouseCursor.defer,
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         decoration: BoxDecoration(
           color: _hovered ? color.withOpacity(0.06) : AppTheme.bgCard,
@@ -496,7 +569,7 @@ class _TagCardState extends State<_TagCard> {
                       Expanded(
                         child: Text(
                           tag.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontSize: 14,
                               fontWeight: FontWeight.w500),
@@ -566,6 +639,7 @@ class _TagCardState extends State<_TagCard> {
             ),
           ],
         ),
+        ),
       ),
     );
   }
@@ -634,14 +708,14 @@ class _TagDialogState extends State<_TagDialog> {
       backgroundColor: AppTheme.bgCard,
       title: Text(_isEdit ? 'Edit tag' : 'New tag',
           style:
-              const TextStyle(color: AppTheme.textPrimary, fontSize: 15)),
+              TextStyle(color: AppTheme.textPrimary, fontSize: 15)),
       content: SizedBox(
         width: 320,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Tag name',
+            Text('Tag name',
                 style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 11,
@@ -651,7 +725,7 @@ class _TagDialogState extends State<_TagDialog> {
               controller: _nameCtrl,
               autofocus: !_isEdit,
               maxLength: 30,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 hintText: 'e.g. Favourite, Battle, Casual…',
                 counterStyle:
                     TextStyle(color: AppTheme.textSecondary, fontSize: 10),
@@ -660,7 +734,7 @@ class _TagDialogState extends State<_TagDialog> {
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 16),
-            const Text('Colour',
+            Text('Colour',
                 style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 11,
@@ -691,7 +765,7 @@ class _TagDialogState extends State<_TagDialog> {
                       style: TextStyle(fontSize: 12)),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: AppTheme.textSecondary,
-                    side: const BorderSide(color: AppTheme.borderColor),
+                    side: BorderSide(color: AppTheme.borderColor),
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 8),
                   ),
@@ -699,7 +773,7 @@ class _TagDialogState extends State<_TagDialog> {
               ],
             ),
             const SizedBox(height: 16),
-            const Text('Preview',
+            Text('Preview',
                 style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 11,
@@ -725,7 +799,7 @@ class _TagDialogState extends State<_TagDialog> {
         ElevatedButton(
           onPressed: _saving ? null : _save,
           child: _saving
-              ? const SizedBox(
+              ? SizedBox(
                   width: 16,
                   height: 16,
                   child: CircularProgressIndicator(

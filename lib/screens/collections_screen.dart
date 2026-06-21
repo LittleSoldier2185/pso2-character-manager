@@ -134,7 +134,7 @@ class _CollectionGridViewState extends State<_CollectionGridView> {
           children: [
             Container(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppTheme.bgCard,
                 border: Border(
                     bottom: BorderSide(color: AppTheme.borderColor)),
@@ -145,7 +145,7 @@ class _CollectionGridViewState extends State<_CollectionGridView> {
                     _search.isNotEmpty
                         ? '${collections.length} of ${provider.allCollections.length} collections'
                         : '${collections.length} collection${collections.length == 1 ? '' : 's'}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 14,
                         fontWeight: FontWeight.w500),
@@ -157,7 +157,7 @@ class _CollectionGridViewState extends State<_CollectionGridView> {
                       onChanged: (v) => setState(() => _search = v),
                       decoration: InputDecoration(
                         hintText: 'Search collections…',
-                        prefixIcon: const Icon(Icons.search_rounded,
+                        prefixIcon: Icon(Icons.search_rounded,
                             size: 15, color: AppTheme.textSecondary),
                         suffixIcon: _search.isNotEmpty
                             ? IconButton(
@@ -170,7 +170,7 @@ class _CollectionGridViewState extends State<_CollectionGridView> {
                             const EdgeInsets.symmetric(vertical: 8),
                         isDense: true,
                       ),
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary, fontSize: 12),
                     ),
                   ),
@@ -186,7 +186,7 @@ class _CollectionGridViewState extends State<_CollectionGridView> {
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
-                      side: const BorderSide(
+                      side: BorderSide(
                           color: AppTheme.borderColor),
                     ),
                     onSelected: (opt) =>
@@ -280,7 +280,7 @@ class _CollectionGridViewState extends State<_CollectionGridView> {
             _search.isNotEmpty
                 ? 'No collections match "$_search"'
                 : 'No collections yet',
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppTheme.textSecondary, fontSize: 16)),
           const SizedBox(height: 8),
           if (_search.isEmpty)
@@ -400,7 +400,7 @@ class _CollectionCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           collection.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: AppTheme.textPrimary,
                               fontSize: 13,
                               fontWeight: FontWeight.w500),
@@ -410,13 +410,13 @@ class _CollectionCard extends StatelessWidget {
                       ),
                       GestureDetector(
                         onTap: () => _showEditDialog(context),
-                        child: const Icon(Icons.edit_outlined,
+                        child: Icon(Icons.edit_outlined,
                             size: 13, color: AppTheme.textSecondary),
                       ),
                       const SizedBox(width: 6),
                       GestureDetector(
                         onTap: () => _confirmDelete(context),
-                        child: const Icon(Icons.delete_outline,
+                        child: Icon(Icons.delete_outline,
                             size: 13, color: AppTheme.textSecondary),
                       ),
                     ],
@@ -425,7 +425,7 @@ class _CollectionCard extends StatelessWidget {
                     const SizedBox(height: 2),
                     Text(
                       collection.description,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textSecondary, fontSize: 10),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -435,7 +435,7 @@ class _CollectionCard extends StatelessWidget {
                   Row(
                     children: [
                       Text('$count character${count == 1 ? '' : 's'}',
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: AppTheme.textSecondary, fontSize: 11)),
                       const Spacer(),
                       Row(children: [
@@ -478,7 +478,7 @@ class _CollectionCard extends StatelessWidget {
             color: AppTheme.bgSurface,
             child: Center(
               child: Text('+$remaining',
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textSecondary, fontSize: 12)),
             ),
           ),
@@ -604,7 +604,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
   }
 
   Widget _fieldLabel(String text) => Text(text,
-      style: const TextStyle(
+      style: TextStyle(
           color: AppTheme.textSecondary,
           fontSize: 12,
           fontWeight: FontWeight.w500));
@@ -685,7 +685,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
             // ── Top bar ─────────────────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppTheme.bgCard,
                 border: Border(
                     bottom: BorderSide(color: AppTheme.borderColor)),
@@ -706,7 +706,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  const Text('/',
+                  Text('/',
                       style: TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 13)),
@@ -715,7 +715,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                       size: 14, color: accentCol),
                   const SizedBox(width: 5),
                   Text(col.name,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 14,
                           fontWeight: FontWeight.w500)),
@@ -728,7 +728,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text('$count',
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 11)),
                   ),
@@ -740,7 +740,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                       onChanged: (v) => setState(() => _search = v),
                       decoration: InputDecoration(
                         hintText: 'Search in collection…',
-                        prefixIcon: const Icon(Icons.search_rounded,
+                        prefixIcon: Icon(Icons.search_rounded,
                             size: 15,
                             color: AppTheme.textSecondary),
                         suffixIcon: _search.isNotEmpty
@@ -754,7 +754,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                             const EdgeInsets.symmetric(vertical: 8),
                         isDense: true,
                       ),
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary, fontSize: 12),
                     ),
                   ),
@@ -770,7 +770,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
-                      side: const BorderSide(
+                      side: BorderSide(
                           color: AppTheme.borderColor),
                     ),
                     onSelected: (i) async {
@@ -800,7 +800,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
-                      side: const BorderSide(
+                      side: BorderSide(
                           color: AppTheme.borderColor),
                     ),
                     onSelected: (value) {
@@ -980,13 +980,13 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                               Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  const Icon(
+                                  Icon(
                                       Icons.people_outline_rounded,
                                       size: 11,
                                       color: AppTheme.textSecondary),
                                   const SizedBox(width: 4),
                                   Text('$count',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: AppTheme.textSecondary,
                                           fontSize: 11)),
                                 ],
@@ -1011,7 +1011,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                           _fieldLabel('Collection name'),
                           const SizedBox(height: 6),
                           Text(col.name,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w600,
                                   color: AppTheme.textPrimary)),
@@ -1022,18 +1022,18 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                           _fieldLabel('Description'),
                           const SizedBox(height: 6),
                           col.description.isEmpty
-                              ? const Text('No description',
+                              ? Text('No description',
                                   style: TextStyle(
                                       color: AppTheme.textSecondary,
                                       fontSize: 13))
                               : Text(col.description,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       color: AppTheme.textPrimary,
                                       fontSize: 13,
                                       height: 1.5)),
 
                           const SizedBox(height: 24),
-                          const Divider(
+                          Divider(
                               color: AppTheme.borderColor, height: 1),
                           const SizedBox(height: 16),
 
@@ -1042,7 +1042,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                             children: [
                               Text(
                                 'Characters',
-                                style: const TextStyle(
+                                style: TextStyle(
                                     color: AppTheme.textSecondary,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w500),
@@ -1058,7 +1058,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                                         BorderRadius.circular(8),
                                   ),
                                   child: Text('${chars.length}',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: AppTheme.textSecondary,
                                           fontSize: 10)),
                                 ),
@@ -1078,11 +1078,11 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Icon(Icons.edit_outlined,
+                                      Icon(Icons.edit_outlined,
                                           size: 13,
                                           color: AppTheme.textSecondary),
                                       const SizedBox(width: 5),
-                                      const Text('Edit collection',
+                                      Text('Edit collection',
                                           style: TextStyle(
                                               color: AppTheme.textSecondary,
                                               fontSize: 12)),
@@ -1153,7 +1153,7 @@ class _CollectionDetailViewState extends State<_CollectionDetailView> {
                                         _search.isNotEmpty
                                             ? 'No results for "$_search"'
                                             : 'No characters yet',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                             color:
                                                 AppTheme.textSecondary,
                                             fontSize: 14),
@@ -1274,7 +1274,7 @@ class _AddCharactersDialogState extends State<_AddCharactersDialog> {
                   const SizedBox(width: 8),
                   Text(
                     'Add to ${widget.collection.name}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 15,
                         fontWeight: FontWeight.w500),
@@ -1282,7 +1282,7 @@ class _AddCharactersDialogState extends State<_AddCharactersDialog> {
                   const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close,
+                    icon: Icon(Icons.close,
                         size: 16,
                         color: AppTheme.textSecondary),
                     padding: EdgeInsets.zero,
@@ -1298,18 +1298,18 @@ class _AddCharactersDialogState extends State<_AddCharactersDialog> {
               child: TextField(
                 autofocus: true,
                 onChanged: (v) => setState(() => _search = v),
-                style: const TextStyle(
+                style: TextStyle(
                     color: AppTheme.textPrimary, fontSize: 13),
                 decoration: InputDecoration(
                   hintText: 'Search characters…',
-                  prefixIcon: const Icon(Icons.search_rounded,
+                  prefixIcon: Icon(Icons.search_rounded,
                       size: 14,
                       color: AppTheme.textSecondary),
                   suffixIcon: _search.isNotEmpty
                       ? GestureDetector(
                           onTap: () =>
                               setState(() => _search = ''),
-                          child: const Icon(Icons.close,
+                          child: Icon(Icons.close,
                               size: 13,
                               color: AppTheme.textSecondary),
                         )
@@ -1321,7 +1321,7 @@ class _AddCharactersDialogState extends State<_AddCharactersDialog> {
               ),
             ),
             const SizedBox(height: 8),
-            const Divider(height: 1, color: AppTheme.borderColor),
+            Divider(height: 1, color: AppTheme.borderColor),
 
             // Character list
             Expanded(
@@ -1331,7 +1331,7 @@ class _AddCharactersDialogState extends State<_AddCharactersDialog> {
                         _search.isNotEmpty
                             ? 'No characters match "$_search"'
                             : 'All characters are already in this collection',
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary,
                             fontSize: 13),
                         textAlign: TextAlign.center,
@@ -1464,7 +1464,7 @@ class _AddCharactersDialogState extends State<_AddCharactersDialog> {
                     ),
             ),
 
-            const Divider(height: 1, color: AppTheme.borderColor),
+            Divider(height: 1, color: AppTheme.borderColor),
 
             // Footer
             Padding(
@@ -1479,7 +1479,7 @@ class _AddCharactersDialogState extends State<_AddCharactersDialog> {
                           color: accentCol, fontSize: 12),
                     )
                   else
-                    const Text(
+                    Text(
                       'Tap characters to select',
                       style: TextStyle(
                           color: AppTheme.textSecondary,
@@ -1489,7 +1489,7 @@ class _AddCharactersDialogState extends State<_AddCharactersDialog> {
                   OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(
+                      side: BorderSide(
                           color: AppTheme.borderColor),
                       foregroundColor: AppTheme.textSecondary,
                     ),
@@ -1679,7 +1679,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                 children: [
                   Text(
                     isCreate ? 'New collection' : 'Edit collection',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 16,
                         fontWeight: FontWeight.w500),
@@ -1687,7 +1687,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                   const Spacer(),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close,
+                    icon: Icon(Icons.close,
                         size: 16, color: AppTheme.textSecondary),
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
@@ -1720,7 +1720,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                             color: AppTheme.bgSurface,
                             borderRadius: BorderRadius.circular(4),
                           ),
-                          child: const Text('after save',
+                          child: Text('after save',
                               style: TextStyle(
                                   color: AppTheme.textSecondary,
                                   fontSize: 9)),
@@ -1746,7 +1746,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                 ),
               ],
             ),
-            const Divider(height: 1, color: AppTheme.borderColor),
+            Divider(height: 1, color: AppTheme.borderColor),
             // ── Tab views ────────────────────────────────────────
             SizedBox(
               height: 340,
@@ -1794,7 +1794,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                                                 .withOpacity(0.5),
                                           ),
                                           const SizedBox(height: 4),
-                                          const Text('Cover',
+                                          Text('Cover',
                                               style: TextStyle(
                                                   color:
                                                       AppTheme.textSecondary,
@@ -1808,13 +1808,13 @@ class _CollectionDialogState extends State<_CollectionDialog>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Collection cover',
+                                  Text('Collection cover',
                                       style: TextStyle(
                                           color: AppTheme.textPrimary,
                                           fontSize: 13,
                                           fontWeight: FontWeight.w500)),
                                   const SizedBox(height: 4),
-                                  const Text(
+                                  Text(
                                       'Shown on the collections grid.',
                                       style: TextStyle(
                                           color: AppTheme.textSecondary,
@@ -1833,7 +1833,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                                         style: OutlinedButton.styleFrom(
                                           foregroundColor:
                                               AppTheme.textSecondary,
-                                          side: const BorderSide(
+                                          side: BorderSide(
                                               color: AppTheme.borderColor),
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 10, vertical: 5),
@@ -1875,7 +1875,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                           ],
                         ),
                         const SizedBox(height: 16),
-                        const Divider(color: AppTheme.borderColor, height: 1),
+                        Divider(color: AppTheme.borderColor, height: 1),
                         const SizedBox(height: 16),
                         // Name field
                         _fieldLabel('Collection name'),
@@ -1884,7 +1884,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                           controller: _nameCtrl,
                           autofocus: isCreate,
                           maxLength: 60,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             hintText: 'e.g. My CAST roster',
                             counterStyle: TextStyle(
                                 color: AppTheme.textSecondary, fontSize: 10),
@@ -1893,7 +1893,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                         const SizedBox(height: 14),
                         // Description field
                         _fieldLabel('Description'),
-                        const Text('Optional',
+                        Text('Optional',
                             style: TextStyle(
                                 color: AppTheme.textSecondary,
                                 fontSize: 10)),
@@ -1902,7 +1902,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                           controller: _descCtrl,
                           maxLines: 2,
                           maxLength: 200,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             hintText: 'A short note about this collection…',
                             counterStyle: TextStyle(
                                 color: AppTheme.textSecondary, fontSize: 10),
@@ -2035,7 +2035,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                                     border: Border.all(
                                         color: AppTheme.borderColor),
                                   ),
-                                  child: const Icon(Icons.close,
+                                  child: Icon(Icons.close,
                                       size: 13,
                                       color: AppTheme.textSecondary),
                                 ),
@@ -2043,7 +2043,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                           ],
                         ),
                         const SizedBox(height: 4),
-                        const Text(
+                        Text(
                             'Used for folder icon and label colour on the grid.',
                             style: TextStyle(
                                 color: AppTheme.textSecondary, fontSize: 10)),
@@ -2061,13 +2061,13 @@ class _CollectionDialogState extends State<_CollectionDialog>
                                   color: AppTheme.textSecondary
                                       .withOpacity(0.3)),
                               const SizedBox(height: 12),
-                              const Text(
+                              Text(
                                 'Create the collection first,',
                                 style: TextStyle(
                                     color: AppTheme.textSecondary,
                                     fontSize: 13),
                               ),
-                              const Text(
+                              Text(
                                 'then you can add characters to it.',
                                 style: TextStyle(
                                     color: AppTheme.textSecondary,
@@ -2083,7 +2083,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
               ),
             ),
             // ── Footer ───────────────────────────────────────────
-            const Divider(height: 1, color: AppTheme.borderColor),
+            Divider(height: 1, color: AppTheme.borderColor),
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 12, 20, 16),
               child: Row(
@@ -2092,7 +2092,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                   OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: AppTheme.borderColor),
+                      side: BorderSide(color: AppTheme.borderColor),
                       foregroundColor: AppTheme.textSecondary,
                     ),
                     child: const Text('Cancel'),
@@ -2101,7 +2101,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
                   ElevatedButton(
                     onPressed: _saving ? null : _handleSave,
                     child: _saving
-                        ? const SizedBox(
+                        ? SizedBox(
                             width: 16,
                             height: 16,
                             child: CircularProgressIndicator(
@@ -2119,7 +2119,7 @@ class _CollectionDialogState extends State<_CollectionDialog>
   }
 
   Widget _fieldLabel(String text) => Text(text,
-      style: const TextStyle(
+      style: TextStyle(
           color: AppTheme.textSecondary,
           fontSize: 11,
           fontWeight: FontWeight.w500,
@@ -2158,16 +2158,16 @@ class _CharactersTabState extends State<_CharactersTab> {
                 padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
                 child: TextField(
                   onChanged: (v) => setState(() => _search = v),
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textPrimary, fontSize: 13),
                   decoration: InputDecoration(
                     hintText: 'Search characters…',
-                    prefixIcon: const Icon(Icons.search_rounded,
+                    prefixIcon: Icon(Icons.search_rounded,
                         size: 14, color: AppTheme.textSecondary),
                     suffixIcon: _search.isNotEmpty
                         ? GestureDetector(
                             onTap: () => setState(() => _search = ''),
-                            child: const Icon(Icons.close,
+                            child: Icon(Icons.close,
                                 size: 13, color: AppTheme.textSecondary),
                           )
                         : null,
@@ -2186,12 +2186,12 @@ class _CharactersTabState extends State<_CharactersTab> {
                               size: 36,
                               color: AppTheme.textSecondary.withOpacity(0.3)),
                           const SizedBox(height: 10),
-                          const Text('No characters yet',
+                          Text('No characters yet',
                               style: TextStyle(
                                   color: AppTheme.textSecondary,
                                   fontSize: 13)),
                           const SizedBox(height: 4),
-                          const Text(
+                          Text(
                               'Edit a character and assign it to this collection',
                               style: TextStyle(
                                   color: AppTheme.textSecondary,
@@ -2203,7 +2203,7 @@ class _CharactersTabState extends State<_CharactersTab> {
                       ? Center(
                           child: Text(
                             'No results for "$_search"',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: AppTheme.textSecondary, fontSize: 13),
                           ),
                         )
@@ -2235,12 +2235,12 @@ class _CharactersTabState extends State<_CharactersTab> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(c.name,
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                             color: AppTheme.textPrimary,
                                             fontSize: 12)),
                                   ),
                                   Text('${c.race} · ${c.gender[0]}',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                           color: AppTheme.textSecondary,
                                           fontSize: 10)),
                                   const SizedBox(width: 8),
@@ -2252,7 +2252,7 @@ class _CharactersTabState extends State<_CharactersTab> {
                                           .toList();
                                       await provider.updateCharacter(c);
                                     },
-                                    child: const Icon(Icons.close,
+                                    child: Icon(Icons.close,
                                         size: 13,
                                         color: AppTheme.textSecondary),
                                   ),
@@ -2266,7 +2266,7 @@ class _CharactersTabState extends State<_CharactersTab> {
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
               child: Text(
                 'Removing a character here only removes them from this collection — it does not delete them from your library.',
-                style: const TextStyle(
+                style: TextStyle(
                     color: AppTheme.textSecondary, fontSize: 10),
               ),
             ),

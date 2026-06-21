@@ -32,6 +32,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
   bool _isSaving = false;
   bool _isDraggingFile = false;
   bool _isDraggingImage = false;
+  CharacterData? _targetCharacter; // if set, save as variant of this character
 
   // Conflict resolution state
   // null = no conflict, non-null = user chose custom storage name
@@ -79,8 +80,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
     if (result != null && result.files.single.path != null) {
       final path = result.files.single.path!;
       _setCharFile(path);
-      // Check for conflict after picking
-      await _checkConflict(path);
+      if (_targetCharacter == null) await _checkConflict(path);
     }
   }
 
@@ -145,19 +145,19 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                     ),
                     child: RichText(
                       text: TextSpan(
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary, fontSize: 13),
                         children: [
                           TextSpan(
                             text: p.basename(filePath),
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: AppTheme.textPrimary,
                                 fontWeight: FontWeight.w500),
                           ),
                           const TextSpan(text: ' is already registered as '),
                           TextSpan(
                             text: '"$conflictingCharName"',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: AppTheme.textPrimary,
                                 fontWeight: FontWeight.w500),
                           ),
@@ -169,7 +169,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  const Text(
+                  Text(
                     'Rename this file to save as a new entry:',
                     style: TextStyle(
                         color: AppTheme.textSecondary,
@@ -188,7 +188,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                             hintText: '${originalName}_copy',
                             errorText: isRenameEmpty ? 'Name required' : null,
                           ),
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: AppTheme.textPrimary, fontSize: 13),
                         ),
                       ),
@@ -202,7 +202,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                           border: Border.all(color: AppTheme.borderColor),
                         ),
                         child: Text(ext,
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: AppTheme.textSecondary, fontSize: 13)),
                       ),
                     ],
@@ -302,14 +302,19 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
     try {
       final provider = context.read<CharacterProvider>();
 
-      if (_replaceExisting && _conflictingCharName != null) {
-        // Find the existing character and replace its file
+      if (_targetCharacter != null) {
+        await provider.addVariant(
+          character: _targetCharacter!,
+          displayName: _nameController.text.trim(),
+          sourceFilePath: _selectedCharFilePath!,
+          sourceThumbnailPath: _selectedImagePath,
+        );
+      } else if (_replaceExisting && _conflictingCharName != null) {
         final existing = provider.allCharacters.firstWhere(
           (c) => c.name == _conflictingCharName,
           orElse: () => throw StateError('not found'),
         );
         await provider.replaceCharacterFile(existing, _selectedCharFilePath!);
-        // Still add as new entry since user might want both
         await provider.addCharacter(
           name: _nameController.text.trim(),
           sourceFilePath: _selectedCharFilePath!,
@@ -345,7 +350,9 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final collections = context.watch<CharacterProvider>().allCollections;
+    final provider    = context.watch<CharacterProvider>();
+    final collections = provider.allCollections;
+    final characters  = provider.allCharacters;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Add character')),
@@ -413,11 +420,11 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                                         color: AppTheme.textSecondary
                                             .withOpacity(0.5)),
                                     const SizedBox(height: 8),
-                                    const Text('Drop image here',
+                                    Text('Drop image here',
                                         style: TextStyle(
                                             color: AppTheme.textSecondary,
                                             fontSize: 12)),
-                                    const Text('or click to browse',
+                                    Text('or click to browse',
                                         style: TextStyle(
                                             color: AppTheme.textSecondary,
                                             fontSize: 11)),
@@ -437,7 +444,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                             : 'Change thumbnail'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppTheme.textSecondary,
-                          side: const BorderSide(
+                          side: BorderSide(
                               color: AppTheme.borderColor),
                           padding:
                               const EdgeInsets.symmetric(vertical: 8),
@@ -456,7 +463,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                         final dropped = details.files.firstOrNull;
                         if (dropped != null) {
                           _setCharFile(dropped.path);
-                          await _checkConflict(dropped.path);
+                          if (_targetCharacter == null) await _checkConflict(dropped.path);
                         }
                       },
                       child: GestureDetector(
@@ -524,7 +531,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                             : 'Change file'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppTheme.textSecondary,
-                          side: const BorderSide(
+                          side: BorderSide(
                               color: AppTheme.borderColor),
                           padding:
                               const EdgeInsets.symmetric(vertical: 8),
@@ -565,69 +572,77 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _label('Character name *'),
+                    _label(_targetCharacter != null
+                        ? 'Variant name *'
+                        : 'Character name *'),
                     const SizedBox(height: 6),
                     TextFormField(
                       controller: _nameController,
-                      decoration: const InputDecoration(
-                          hintText: 'Enter a name for this character'),
+                      decoration: InputDecoration(
+                          hintText: _targetCharacter != null
+                              ? 'e.g. Summer look, Battle outfit…'
+                              : 'Enter a name for this character'),
                       validator: (v) =>
                           (v == null || v.trim().isEmpty)
                               ? 'Name is required'
                               : null,
                     ),
                     const SizedBox(height: 18),
-                    _label('Description (optional)'),
-                    const SizedBox(height: 6),
-                    TextFormField(
-                      controller: _descController,
-                      maxLines: 3,
-                      decoration: const InputDecoration(
-                          hintText:
-                              'Notes about this character, style, build…'),
-                    ),
-                    const SizedBox(height: 18),
-                    _label('Collections (optional)'),
-                    const SizedBox(height: 6),
-                    _buildCollectionPicker(collections),
-                    const SizedBox(height: 18),
-                    _label('Tags (optional)'),
-                    const SizedBox(height: 6),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextFormField(
-                            controller: _tagController,
-                            decoration: const InputDecoration(
-                                hintText: 'Type a tag and press Add'),
-                            onFieldSubmitted: (_) => _addTag(),
+                    _buildVariantPicker(context, characters),
+                    if (_targetCharacter == null) ...[
+                      const SizedBox(height: 18),
+                      _label('Description (optional)'),
+                      const SizedBox(height: 6),
+                      TextFormField(
+                        controller: _descController,
+                        maxLines: 3,
+                        decoration: const InputDecoration(
+                            hintText:
+                                'Notes about this character, style, build…'),
+                      ),
+                      const SizedBox(height: 18),
+                      _label('Collections (optional)'),
+                      const SizedBox(height: 6),
+                      _buildCollectionPicker(collections),
+                      const SizedBox(height: 18),
+                      _label('Tags (optional)'),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: _tagController,
+                              decoration: const InputDecoration(
+                                  hintText: 'Type a tag and press Add'),
+                              onFieldSubmitted: (_) => _addTag(),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        ElevatedButton(
-                          onPressed: _addTag,
-                          style: ElevatedButton.styleFrom(
-                              backgroundColor: AppTheme.bgSurface,
-                              foregroundColor: AppTheme.accent,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 14)),
-                          child: const Text('Add'),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: _addTag,
+                            style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.bgSurface,
+                                foregroundColor: AppTheme.accent,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 14)),
+                            child: const Text('Add'),
+                          ),
+                        ],
+                      ),
+                      if (_tags.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: _tags
+                              .map((tag) => TagChip(
+                                    label: tag,
+                                    onDeleted: () =>
+                                        setState(() => _tags.remove(tag)),
+                                  ))
+                              .toList(),
                         ),
                       ],
-                    ),
-                    if (_tags.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: _tags
-                            .map((tag) => TagChip(
-                                  label: tag,
-                                  onDeleted: () =>
-                                      setState(() => _tags.remove(tag)),
-                                ))
-                            .toList(),
-                      ),
                     ],
                     const SizedBox(height: 32),
                     SizedBox(
@@ -641,8 +656,11 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                                 height: 20,
                                 child: CircularProgressIndicator(
                                     strokeWidth: 2))
-                            : const Text('Save character',
-                                style: TextStyle(fontSize: 15)),
+                            : Text(
+                                _targetCharacter != null
+                                    ? 'Save variant'
+                                    : 'Save character',
+                                style: const TextStyle(fontSize: 15)),
                       ),
                     ),
                   ],
@@ -655,9 +673,137 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
     );
   }
 
+  Widget _buildVariantPicker(BuildContext context, List<CharacterData> characters) {
+    if (_targetCharacter == null) {
+      return OutlinedButton.icon(
+        onPressed: characters.isEmpty
+            ? null
+            : () async {
+                final picked = await _pickCharacter(context, characters);
+                if (picked != null) setState(() => _targetCharacter = picked);
+              },
+        icon: const Icon(Icons.call_split_rounded, size: 14),
+        label: Text(characters.isEmpty
+            ? 'No existing characters'
+            : 'Add as variant of existing character'),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: AppTheme.textSecondary,
+          side: BorderSide(color: AppTheme.borderColor),
+          textStyle: const TextStyle(fontSize: 12),
+        ),
+      );
+    }
+    final raceColor = AppTheme.raceColor(_targetCharacter!.race);
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+      decoration: BoxDecoration(
+        color: AppTheme.accent.withOpacity(0.07),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.accent.withOpacity(0.4)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 8, height: 8,
+            decoration: BoxDecoration(color: raceColor, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Adding as variant of',
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+                Text(_targetCharacter!.name,
+                    style: TextStyle(
+                        color: AppTheme.accent,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500)),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () => setState(() => _targetCharacter = null),
+            child: Icon(Icons.close, size: 14, color: AppTheme.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<CharacterData?> _pickCharacter(
+      BuildContext context, List<CharacterData> characters) async {
+    String query = '';
+    return showDialog<CharacterData>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSt) {
+          final filtered = query.isEmpty
+              ? characters
+              : characters
+                  .where((c) =>
+                      c.name.toLowerCase().contains(query.toLowerCase()))
+                  .toList();
+          return AlertDialog(
+            backgroundColor: AppTheme.bgCard,
+            title: TextField(
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'Search characters…',
+                prefixIcon: Icon(Icons.search_rounded,
+                    size: 16, color: AppTheme.textSecondary),
+              ),
+              onChanged: (v) => setSt(() => query = v),
+            ),
+            content: SizedBox(
+              width: 300,
+              height: 320,
+              child: filtered.isEmpty
+                  ? Center(
+                      child: Text('No characters found',
+                          style: TextStyle(color: AppTheme.textSecondary)))
+                  : ListView.builder(
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) {
+                        final c = filtered[i];
+                        final rc = AppTheme.raceColor(c.race);
+                        return ListTile(
+                          dense: true,
+                          leading: Container(
+                            width: 8,
+                            height: 8,
+                            margin: const EdgeInsets.only(top: 4),
+                            decoration: BoxDecoration(
+                                color: rc, shape: BoxShape.circle),
+                          ),
+                          title: Text(c.name,
+                              style: TextStyle(
+                                  color: AppTheme.textPrimary, fontSize: 13)),
+                          subtitle: Text(
+                              '${c.race} · ${c.gender} · ${c.variants.length} variant${c.variants.length == 1 ? '' : 's'}',
+                              style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 11)),
+                          onTap: () => Navigator.pop(ctx, c),
+                        );
+                      },
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Widget _buildCollectionPicker(List collections) {
     if (collections.isEmpty) {
-      return const Text(
+      return Text(
           'No collections yet — create one in the Collections tab.',
           style: TextStyle(color: AppTheme.textSecondary, fontSize: 12));
     }
@@ -716,7 +862,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
   }
 
   Widget _label(String text) => Text(text,
-      style: const TextStyle(
+      style: TextStyle(
           color: AppTheme.textSecondary,
           fontSize: 13,
           fontWeight: FontWeight.w500));

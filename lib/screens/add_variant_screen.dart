@@ -174,11 +174,11 @@ class _AddVariantScreenState extends State<AddVariantScreen> {
                                         color: AppTheme.textSecondary
                                             .withOpacity(0.5)),
                                     const SizedBox(height: 8),
-                                    const Text('Drop image here',
+                                    Text('Drop image here',
                                         style: TextStyle(
                                             color: AppTheme.textSecondary,
                                             fontSize: 12)),
-                                    const Text('or click to browse',
+                                    Text('or click to browse',
                                         style: TextStyle(
                                             color: AppTheme.textSecondary,
                                             fontSize: 11)),
@@ -198,7 +198,7 @@ class _AddVariantScreenState extends State<AddVariantScreen> {
                             : 'Change thumbnail'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppTheme.textSecondary,
-                          side: const BorderSide(
+                          side: BorderSide(
                               color: AppTheme.borderColor),
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           textStyle: const TextStyle(fontSize: 12),
@@ -283,7 +283,7 @@ class _AddVariantScreenState extends State<AddVariantScreen> {
                             : 'Change file'),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: AppTheme.textSecondary,
-                          side: const BorderSide(
+                          side: BorderSide(
                               color: AppTheme.borderColor),
                           padding: const EdgeInsets.symmetric(vertical: 8),
                           textStyle: const TextStyle(fontSize: 12),
@@ -355,7 +355,7 @@ class _AddVariantScreenState extends State<AddVariantScreen> {
   }
 
   Widget _label(String text) => Text(text,
-      style: const TextStyle(
+      style: TextStyle(
           color: AppTheme.textSecondary,
           fontSize: 13,
           fontWeight: FontWeight.w500));
