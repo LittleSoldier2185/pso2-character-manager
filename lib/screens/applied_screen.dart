@@ -132,12 +132,18 @@ class _AppliedScreenState extends State<AppliedScreen> {
         }
         applied = _sorted(applied);
 
+        // Expand to one entry per applied variant
+        final pairs = [
+          for (final c in applied)
+            for (final v in c.appliedVariants) (c, v),
+        ];
+
         return Column(
           children: [
             // ── Top bar ─────────────────────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppTheme.bgCard,
                 border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
               ),
@@ -150,7 +156,7 @@ class _AppliedScreenState extends State<AppliedScreen> {
                     _search.isNotEmpty
                         ? '${applied.length} of $totalCount applied'
                         : '$totalCount applied',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 14,
                         fontWeight: FontWeight.w500),
@@ -163,7 +169,7 @@ class _AppliedScreenState extends State<AppliedScreen> {
                       onChanged: (v) => setState(() => _search = v),
                       decoration: InputDecoration(
                         hintText: 'Search applied…',
-                        prefixIcon: const Icon(Icons.search_rounded,
+                        prefixIcon: Icon(Icons.search_rounded,
                             size: 15, color: AppTheme.textSecondary),
                         suffixIcon: _search.isNotEmpty
                             ? IconButton(
@@ -175,7 +181,7 @@ class _AppliedScreenState extends State<AppliedScreen> {
                             const EdgeInsets.symmetric(vertical: 8),
                         isDense: true,
                       ),
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary, fontSize: 12),
                     ),
                   ),
@@ -188,7 +194,7 @@ class _AppliedScreenState extends State<AppliedScreen> {
                         size: 16, color: AppTheme.textSecondary),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
-                      side: const BorderSide(color: AppTheme.borderColor),
+                      side: BorderSide(color: AppTheme.borderColor),
                     ),
                     onSelected: (opt) => setState(() => _sortOption = opt),
                     itemBuilder: (_) => SortOption.values
@@ -204,7 +210,7 @@ class _AppliedScreenState extends State<AppliedScreen> {
                         size: 16, color: AppTheme.textSecondary),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
-                      side: const BorderSide(color: AppTheme.borderColor),
+                      side: BorderSide(color: AppTheme.borderColor),
                     ),
                     onSelected: (i) async {
                       setState(() => _cardSize = i);
@@ -233,7 +239,7 @@ class _AppliedScreenState extends State<AppliedScreen> {
                       ? Center(
                           child: Text(
                             'No results for "$_search"',
-                            style: const TextStyle(
+                            style: TextStyle(
                                 color: AppTheme.textSecondary, fontSize: 14),
                           ),
                         )
@@ -246,12 +252,13 @@ class _AppliedScreenState extends State<AppliedScreen> {
                             crossAxisSpacing: 10,
                             mainAxisSpacing: 10,
                           ),
-                          itemCount: applied.length,
+                          itemCount: pairs.length,
                           itemBuilder: (context, index) {
-                            final c = applied[index];
+                            final (c, vName) = pairs[index];
                             return CharacterCard(
                               character: c,
                               cardSize: _cardSize,
+                              variantFolderName: vName,
                               onTap: () => Navigator.push(
                                 context,
                                 MaterialPageRoute(
@@ -279,7 +286,7 @@ class _AppliedScreenState extends State<AppliedScreen> {
             color: AppTheme.textSecondary.withOpacity(0.3),
           ),
           const SizedBox(height: 16),
-          const Text(
+          Text(
             'No characters applied yet',
             style: TextStyle(
                 color: AppTheme.textSecondary,
@@ -287,7 +294,7 @@ class _AppliedScreenState extends State<AppliedScreen> {
                 fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 8),
-          const Text(
+          Text(
             'Click the + button on any character card to apply it',
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
           ),
@@ -355,7 +362,7 @@ class _GameFolderStatus extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Set the path to your PSO2 character data folder.\n\n'
               'Example: C:\\PSO2\\pso2_bin\\data\\win32',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),

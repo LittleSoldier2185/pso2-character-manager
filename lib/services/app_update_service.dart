@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-const kAppVersion = '1.3.4';
+const kAppVersion = '1.4.0';
 
 class AppUpdateInfo {
   final String version;

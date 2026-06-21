@@ -17,8 +17,8 @@ enum CharacterTier {
   static const Map<CharacterTier, int> _colours = {
     CharacterTier.s: 0xFFD85A30,
     CharacterTier.a: 0xFFBA7517,
-    CharacterTier.b: 0xFF639922,
-    CharacterTier.c: 0xFF378ADD,
+    CharacterTier.b: 0xFF9E9E9E,
+    CharacterTier.c: 0xFFB87333,
     CharacterTier.d: 0xFF888780,
   };
 
@@ -27,8 +27,8 @@ enum CharacterTier {
   static const Map<CharacterTier, int> _bgColours = {
     CharacterTier.s: 0xFFFAECE7,
     CharacterTier.a: 0xFFFAC775,
-    CharacterTier.b: 0xFFC0DD97,
-    CharacterTier.c: 0xFFB5D4F4,
+    CharacterTier.b: 0xFFE8E8E8,
+    CharacterTier.c: 0xFFE8C5A0,
     CharacterTier.d: 0xFFD3D1C7,
   };
 
@@ -103,6 +103,10 @@ class CharacterData {
   List<String> appliedVariants;
   List<VariantData> variants;
 
+  // Custom border overrides — null means follow tier setting
+  String? customBorderEffect;
+  int? customBorderColor;
+
   // Absolute path to the character's root folder — not serialized
   final String folderPath;
 
@@ -123,6 +127,8 @@ class CharacterData {
     required this.mainVariant,
     List<String>? appliedVariants,
     List<VariantData>? variants,
+    this.customBorderEffect,
+    this.customBorderColor,
   })  : tags = tags ?? [],
         collectionIds = collectionIds ?? [],
         appliedVariants = appliedVariants ?? [],
@@ -276,6 +282,8 @@ class CharacterData {
     'mainVariant': mainVariant,
     'appliedVariants': appliedVariants,
     'variants': variants.map((v) => v.toJson()).toList(),
+    'customBorderEffect': customBorderEffect,
+    'customBorderColor': customBorderColor,
   };
 
   factory CharacterData.fromJson(
@@ -302,6 +310,8 @@ class CharacterData {
                     VariantData.fromJson(e as Map<String, dynamic>))
                 .toList() ??
             [],
+        customBorderEffect: j['customBorderEffect'] as String?,
+        customBorderColor: j['customBorderColor'] as int?,
         folderPath: folderPath,
       );
 }

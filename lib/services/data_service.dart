@@ -7,6 +7,7 @@ import '../models/character_data.dart';
 import '../models/collection_data.dart';
 import '../models/gallery_data.dart';
 import '../models/tag_data.dart';
+import '../widgets/tier_border.dart';
 
 // ── App settings ──────────────────────────────────────────────────
 
@@ -14,6 +15,7 @@ class AppSettings {
   String? gameFolderPath;
   String? saveLocation;
   int accentColor;
+  int bgColor;
   int gallerySize;
   int cardSize;
   bool persistFilter;
@@ -23,11 +25,13 @@ class AppSettings {
   bool gameFolderPromptShown;
   String? sortOption;
   String? lastSeenVersion;
+  String? tierEffectsJson;
 
   AppSettings({
     this.gameFolderPath,
     this.saveLocation,
     this.accentColor = 0xFF00B4D8,
+    this.bgColor = 0xFF0D1117,
     this.gallerySize = 3,
     this.cardSize = 2,
     this.persistFilter = false,
@@ -37,6 +41,7 @@ class AppSettings {
     this.gameFolderPromptShown = false,
     this.sortOption,
     this.lastSeenVersion,
+    this.tierEffectsJson,
   });
 
   Color? get accentColorValue =>
@@ -46,6 +51,7 @@ class AppSettings {
     'gameFolderPath': gameFolderPath,
     'saveLocation': saveLocation,
     'accentColor': accentColor,
+    'bgColor': bgColor,
     'gallerySize': gallerySize,
     'cardSize': cardSize,
     'persistFilter': persistFilter,
@@ -55,12 +61,14 @@ class AppSettings {
     'gameFolderPromptShown': gameFolderPromptShown,
     'sortOption': sortOption,
     'lastSeenVersion': lastSeenVersion,
+    'tierEffectsJson': tierEffectsJson,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
     gameFolderPath: j['gameFolderPath'] as String?,
     saveLocation: j['saveLocation'] as String?,
     accentColor: (j['accentColor'] as int?) ?? 0xFF00B4D8,
+    bgColor: (j['bgColor'] as int?) ?? 0xFF0D1117,
     gallerySize: (j['gallerySize'] as int?) ?? 3,
     cardSize: (j['cardSize'] as int?) ?? 2,
     persistFilter: (j['persistFilter'] as bool?) ?? false,
@@ -70,6 +78,7 @@ class AppSettings {
     gameFolderPromptShown: (j['gameFolderPromptShown'] as bool?) ?? false,
     sortOption: j['sortOption'] as String?,
     lastSeenVersion: j['lastSeenVersion'] as String?,
+    tierEffectsJson: j['tierEffectsJson'] as String?,
   );
 }
 
@@ -187,6 +196,17 @@ class DataService {
     await saveSettings(s);
   }
 
+  Future<Color?> getBgColor() async {
+    final s = await getSettings();
+    return s.bgColor != 0 ? Color(s.bgColor) : null;
+  }
+
+  Future<void> saveBgColor(Color color) async {
+    final s = await getSettings();
+    s.bgColor = color.toARGB32();
+    await saveSettings(s);
+  }
+
   Future<int> getCardSize() async => (await getSettings()).cardSize;
   Future<void> saveCardSize(int v) async {
     final s = await getSettings();
@@ -204,6 +224,34 @@ class DataService {
     final s = await getSettings();
     s.lastSeenVersion = v;
     await saveSettings(s);
+  }
+
+  Future<void> saveTierEffects(Map<CharacterTier, TierBorderEffect> effects) async {
+    final s = await getSettings();
+    s.tierEffectsJson = jsonEncode(
+      effects.map((k, v) => MapEntry(k.label.toLowerCase(), v.name)),
+    );
+    await saveSettings(s);
+  }
+
+  Future<Map<CharacterTier, TierBorderEffect>?> getTierEffects() async {
+    final s = await getSettings();
+    if (s.tierEffectsJson == null) return null;
+    try {
+      final raw = jsonDecode(s.tierEffectsJson!) as Map<String, dynamic>;
+      return {
+        for (final e in raw.entries)
+          CharacterTier.values.firstWhere(
+            (t) => t.label.toLowerCase() == e.key,
+            orElse: () => CharacterTier.d,
+          ): TierBorderEffect.values.firstWhere(
+            (ef) => ef.name == e.value,
+            orElse: () => TierBorderEffect.none,
+          ),
+      };
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<int> getGallerySize() async => (await getSettings()).gallerySize;

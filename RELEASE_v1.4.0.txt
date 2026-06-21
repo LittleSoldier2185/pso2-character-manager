@@ -1,0 +1,109 @@
+v1.4.0 — Tier effects, Theme customisation & Tag manager
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  IMPROVEMENTS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Tag manager — three quality-of-life improvements:
+  Click any tag card to filter the home screen by that tag instantly.
+  Unused stat card now has a sweep button to delete all unused tags at once.
+  Stats row always shows global counts — no longer affected by the search filter.
+
+• Accent colour — pick any colour from the wheel or choose a quick preset
+  (Cyan, Azure, Purple, Gold, Green, Coral) in Settings → Appearance.
+
+• Background colour — new picker lets you set the app's background tone.
+  Choose from twelve presets — six dark (Midnight, Void, Navy, Dusk, Grove,
+  Ember) and six light (Pearl, Ivory, Mist, Petal, Sage, Slate) — or open
+  the colour wheel for a fully custom colour. Light backgrounds automatically
+  flip to dark text and lighter borders so everything stays readable. All
+  three background levels (dark, card, surface) are derived automatically
+  from the chosen base.
+
+• Both colour changes apply instantly across the whole UI with no restart.
+
+• Tier borders — each tier now has a unique animated border on character cards:
+  S rainbow, A gold shimmer, B silver shimmer, C copper shimmer, D plain gray.
+  B tier updated from green → silver, C tier updated from blue → copper.
+
+• Settings panel reworked into a floating glassmorphism overlay dialog that
+  can be opened from any page without navigating away.
+
+• Settings dialog redesigned with a sidebar nav (Appearance / Cards / Storage / About).
+  The panel is now 16:9 and scales responsively with the window.
+
+• Tier border animations are now customisable per tier in Settings → Cards.
+  Each tier has its own pool of 3–4 unique effects to choose from:
+
+  S — Rainbow, Aurora Pulse, Prismatic Sparkle, Holographic
+  A — Shimmer, Pulse Glow, Double Ring, Molten
+  B — Shimmer, Double Ring, Electric Arc, Particle Sparks
+  C — Shimmer, Dashed Rotation, Plasma Wave, Ember Glow
+  D — None, Subtle Pulse, Dim Flicker
+
+  Changes apply via an Apply button and persist across sessions.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  PER-CHARACTER BORDER CUSTOMISATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Custom border — each character detail screen now has a Border section
+  below the tier picker. Toggle between "Use tier" (follows global tier
+  settings) and "Custom" to override independently.
+
+• Effect — a dropdown with all sixteen effects. Selecting one updates
+  the card immediately.
+
+• Color — nine presets, a colour wheel, and a ✕ swatch to clear back
+  to the tier colour.
+
+• S-tier effects (Rainbow, Aurora Pulse, Prismatic Sparkle, Holographic)
+  disable the colour row — those effects use built-in colour cycles.
+
+• No tier required — characters without a tier can still have a custom
+  border (falls back to accent colour and Shimmer effect).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  IMPORT & ADD CHARACTER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Add as variant — Add Character and both import flows (bundle and scan)
+  now let you add a file as a variant of an existing character instead of
+  creating a new top-level entry. A two-card mode selector appears at the
+  top: "New character" keeps the existing behaviour; "Add as variant"
+  shows a searchable character picker and a variant name field.
+
+• Import bundle rework — the import dialog now opens with the mode
+  selector upfront. Conflict resolution only appears in "New character"
+  mode. The Import button stays disabled until a target is chosen in
+  variant mode.
+
+• Scan import dialog — clicking Import on a scan result now opens a
+  dialog instead of importing immediately with no options. "Import all"
+  in the toolbar still bulk-imports without a dialog.
+
+• Thumbnail picker — all three import flows include an optional thumbnail
+  field. Click to pick an image or drag and drop one directly onto the
+  preview box (jpg, jpeg, png, gif, webp, bmp).
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  SEARCH REWORK
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Keyword search — the search bar now filters live as you type. No more
+  "type keyword + Enter" token workflow. Just type and the grid updates
+  instantly. The X button clears the search.
+
+• Tag filtering remains in the filter panel (tune icon) along with tier,
+  race, gender, collection, and applied status filters.
+
+• The Apply button and keyword token pills have been removed.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  APPLIED SCREEN
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+• Applied screen now shows one card per applied variant. If a character
+  has both a main file and a variant applied, each appears as its own card
+  with its own thumbnail and the variant name labelled below the character
+  name.

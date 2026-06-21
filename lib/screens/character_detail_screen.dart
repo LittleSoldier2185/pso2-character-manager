@@ -13,6 +13,7 @@ import '../services/data_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_title_bar.dart';
 import '../widgets/tag_chip.dart';
+import '../widgets/tier_border.dart';
 import 'add_variant_screen.dart';
 import 'export_bundle_dialog.dart';
 import 'tags_screen.dart';
@@ -219,7 +220,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.arrow_back_rounded,
+                  icon: Icon(Icons.arrow_back_rounded,
                       size: 18, color: AppTheme.textSecondary),
                   onPressed: () => Navigator.pop(context),
                   tooltip: 'Back',
@@ -228,7 +229,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                 Expanded(
                   child: Text(
                     _isEditing ? 'Editing: ${c.name}' : c.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: AppTheme.textPrimary,
                       fontSize: 15,
                       fontWeight: FontWeight.w600,
@@ -240,13 +241,13 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                 ),
                 // Share menu
                 PopupMenuButton<String>(
-                  icon: const Icon(Icons.ios_share_outlined,
+                  icon: Icon(Icons.ios_share_outlined,
                       color: AppTheme.textPrimary),
                   tooltip: 'Share / Export',
                   color: AppTheme.bgCard,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
-                    side: const BorderSide(color: AppTheme.borderColor),
+                    side: BorderSide(color: AppTheme.borderColor),
                   ),
                   onSelected: (value) async {
                     if (value == 'bundle') {
@@ -256,7 +257,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                     }
                   },
                   itemBuilder: (_) => [
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'bundle',
                       child: Row(
                         children: [
@@ -268,7 +269,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                         ],
                       ),
                     ),
-                    const PopupMenuItem<String>(
+                    PopupMenuItem<String>(
                       value: 'file',
                       child: Row(
                         children: [
@@ -283,14 +284,14 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                   ],
                 ),
                 IconButton(
-                  icon: const Icon(Icons.folder_open_outlined,
+                  icon: Icon(Icons.folder_open_outlined,
                       color: AppTheme.textPrimary),
                   onPressed: _openFolder,
                   tooltip: 'Open character folder',
                 ),
                 if (!_isEditing)
                   IconButton(
-                    icon: const Icon(Icons.edit_outlined,
+                    icon: Icon(Icons.edit_outlined,
                         color: AppTheme.textPrimary),
                     onPressed: () => setState(() => _isEditing = true),
                     tooltip: 'Edit',
@@ -303,7 +304,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
               ],
             ),
           ),
-          const Divider(height: 1, color: AppTheme.borderColor),
+          Divider(height: 1, color: AppTheme.borderColor),
           // ── Body ────────────────────────────────────────────────
           Expanded(child: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
@@ -366,7 +367,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                                         .withOpacity(0.4)),
                                 if (_isEditing) ...[
                                   const SizedBox(height: 8),
-                                  const Text('Click to add image',
+                                  Text('Click to add image',
                                       style: TextStyle(
                                           color: AppTheme.textSecondary,
                                           fontSize: 12)),
@@ -389,7 +390,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                           style: const TextStyle(fontSize: 12)),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: AppTheme.textSecondary,
-                        side: const BorderSide(color: AppTheme.borderColor),
+                        side: BorderSide(color: AppTheme.borderColor),
                         padding: const EdgeInsets.symmetric(vertical: 7),
                       ),
                     ),
@@ -432,6 +433,9 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                 // ── Tier picker ──────────────────────────────
                 _TierPicker(character: c),
                 const SizedBox(height: 10),
+                // ── Border customization ─────────────────────
+                _BorderPicker(character: c),
+                const SizedBox(height: 10),
                 // ── Apply toggle button on detail page ─────────
                 SizedBox(
                   width: 240,
@@ -450,7 +454,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                   _isEditing
                       ? TextFormField(controller: _nameController)
                       : Text(c.name,
-                          style: const TextStyle(
+                          style: TextStyle(
                               fontSize: 22,
                               fontWeight: FontWeight.w600,
                               color: AppTheme.textPrimary)),
@@ -466,12 +470,12 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                               hintText: 'Notes about this character…'),
                         )
                       : c.description.isEmpty
-                          ? const Text('No description',
+                          ? Text('No description',
                               style: TextStyle(
                                   color: AppTheme.textSecondary,
                                   fontSize: 13))
                           : Text(c.description,
-                              style: const TextStyle(
+                              style: TextStyle(
                                   color: AppTheme.textPrimary,
                                   fontSize: 13)),
                   const SizedBox(height: 18),
@@ -491,11 +495,11 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                   _fieldLabel('Character file'),
                   const SizedBox(height: 4),
                   Text(c.characterFilePath?.split(r'\').last ?? '',
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textSecondary, fontSize: 12)),
                   const SizedBox(height: 2),
                   Text('Added ${_formatDate(c.createdAt)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textSecondary, fontSize: 11)),
 
                   const SizedBox(height: 20),
@@ -504,7 +508,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                   _VariantsSection(character: c),
 
                   const SizedBox(height: 24),
-                  const Divider(color: AppTheme.borderColor, height: 1),
+                  Divider(color: AppTheme.borderColor, height: 1),
                   const SizedBox(height: 16),
 
                   // ── Save / Cancel buttons (above gallery) ────────
@@ -528,10 +532,10 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                           child: OutlinedButton(
                             onPressed: _cancelEdit,
                             style: OutlinedButton.styleFrom(
-                              side: const BorderSide(
+                              side: BorderSide(
                                   color: AppTheme.borderColor),
                             ),
-                            child: const Text('Cancel',
+                            child: Text('Cancel',
                                 style: TextStyle(
                                     color: AppTheme.textSecondary)),
                           ),
@@ -556,7 +560,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
 
   Widget _buildCollectionPicker(List collections) {
     if (collections.isEmpty) {
-      return const Text('No collections yet.',
+      return Text('No collections yet.',
           style: TextStyle(color: AppTheme.textSecondary, fontSize: 12));
     }
     return Wrap(
@@ -615,7 +619,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
 
   Widget _buildCollectionDisplay(List collections) {
     if (_collectionIds.isEmpty) {
-      return const Text('No collections',
+      return Text('No collections',
           style: TextStyle(color: AppTheme.textSecondary, fontSize: 13));
     }
     return Wrap(
@@ -665,7 +669,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
       children: [
         // Assigned tags as chips
         if (assignedTags.isEmpty && !_isEditing)
-          const Text('No tags',
+          Text('No tags',
               style: TextStyle(
                   color: AppTheme.textSecondary, fontSize: 13))
         else if (assignedTags.isNotEmpty)
@@ -689,7 +693,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
           const SizedBox(height: 10),
           // Unassigned tags to pick from
           if (unassignedTags.isNotEmpty) ...[
-            const Text('Add tag:',
+            Text('Add tag:',
                 style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 11,
@@ -729,7 +733,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                   .toList(),
             ),
           ] else if (allTags.isEmpty)
-            const Text('No tags yet.',
+            Text('No tags yet.',
                 style: TextStyle(
                     color: AppTheme.textSecondary, fontSize: 11)),
 
@@ -759,7 +763,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
   }
 
   Widget _fieldLabel(String text) => Text(text,
-      style: const TextStyle(
+      style: TextStyle(
           color: AppTheme.textSecondary,
           fontSize: 12,
           fontWeight: FontWeight.w500));
@@ -796,7 +800,7 @@ class _TierPicker extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text('Tier',
+              Text('Tier',
                   style: TextStyle(
                       color: AppTheme.textSecondary,
                       fontSize: 11,
@@ -805,7 +809,7 @@ class _TierPicker extends StatelessWidget {
               if (current != null)
                 GestureDetector(
                   onTap: () => provider.setTier(character, null),
-                  child: const Text('Clear',
+                  child: Text('Clear',
                       style: TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: 10)),
@@ -819,34 +823,39 @@ class _TierPicker extends StatelessWidget {
               final selected = current == t;
               final borderColor = Color(t.colorValue);
               final bgColor = Color(t.bgColorValue);
+              final isS = t == CharacterTier.s;
+              final label = isS
+                  ? RainbowText(t.label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700))
+                  : Text(t.label, style: TextStyle(color: selected ? borderColor : AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w700));
               return GestureDetector(
-                onTap: () => provider.setTier(
-                    character, selected ? null : t),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 150),
-                  width: 40,
-                  height: 36,
-                  decoration: BoxDecoration(
-                    color: selected ? bgColor : AppTheme.bgSurface,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: selected ? borderColor : AppTheme.borderColor,
-                      width: selected ? 2 : 1,
-                    ),
-                  ),
-                  child: Center(
-                    child: Text(
-                      t.label,
-                      style: TextStyle(
-                        color: selected
-                            ? borderColor
-                            : AppTheme.textSecondary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
+                onTap: () => provider.setTier(character, selected ? null : t),
+                child: isS && selected
+                    ? SizedBox(
+                        width: 40,
+                        height: 36,
+                        child: buildTierBorder(
+                          effect: TierBorderEffect.rainbow,
+                          color: borderColor,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(8),
+                            child: Container(color: bgColor, child: Center(child: label)),
+                          ),
+                        ),
+                      )
+                    : AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        width: 40,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: selected ? bgColor : AppTheme.bgSurface,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: selected ? borderColor : AppTheme.borderColor,
+                            width: selected ? 2 : 1,
+                          ),
+                        ),
+                        child: Center(child: label),
                       ),
-                    ),
-                  ),
-                ),
               );
             }).toList(),
           ),
@@ -1006,7 +1015,7 @@ class _CharacterGalleryState extends State<_CharacterGallery> {
       builder: (_) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
         title: const Text('Remove image?'),
-        content: const Text(
+        content: Text(
             'This will permanently delete the image file from storage.',
             style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
         actions: [
@@ -1054,7 +1063,7 @@ class _CharacterGalleryState extends State<_CharacterGallery> {
         // Header row
         Row(
           children: [
-            const Text('Gallery',
+            Text('Gallery',
                 style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,
@@ -1068,7 +1077,7 @@ class _CharacterGalleryState extends State<_CharacterGallery> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text('${items.length}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textSecondary, fontSize: 10)),
               ),
             const Spacer(),
@@ -1086,7 +1095,7 @@ class _CharacterGalleryState extends State<_CharacterGallery> {
               ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
-                side: const BorderSide(color: AppTheme.borderColor),
+                side: BorderSide(color: AppTheme.borderColor),
               ),
               onSelected: (cols) async {
                 setState(() => _columns = cols);
@@ -1221,7 +1230,7 @@ class _CharacterGalleryState extends State<_CharacterGallery> {
                 style: TextStyle(color: AppTheme.accent, fontSize: 11)),
           )
         else if (items.isEmpty)
-          const Padding(
+          Padding(
             padding: EdgeInsets.only(top: 4),
             child: Text(
                 'Add images to build a gallery for this character',
@@ -1314,7 +1323,7 @@ class _GalleryThumbState extends State<_GalleryThumb> {
       color: AppTheme.bgCard,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: AppTheme.borderColor),
+        side: BorderSide(color: AppTheme.borderColor),
       ),
       position: RelativeRect.fromLTRB(
           pos.dx, pos.dy, size.width - pos.dx, size.height - pos.dy),
@@ -1347,7 +1356,7 @@ class _GalleryThumbState extends State<_GalleryThumb> {
       Icon(icon, size: 14, color: AppTheme.textSecondary),
       const SizedBox(width: 8),
       Text(label,
-          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+          style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
     ],
   );
 
@@ -1391,7 +1400,7 @@ class _GalleryThumbState extends State<_GalleryThumb> {
                             fit: BoxFit.cover,
                             gaplessPlayback: true,
                           )
-                    : const Center(
+                    : Center(
                         child: Icon(Icons.broken_image_outlined,
                             size: 24, color: AppTheme.textSecondary)),
               ),
@@ -1660,7 +1669,7 @@ class _VariantsSectionState extends State<_VariantsSection> {
       children: [
         Row(
           children: [
-            const Text('Variants',
+            Text('Variants',
                 style: TextStyle(
                     color: AppTheme.textSecondary,
                     fontSize: 12,
@@ -1676,7 +1685,7 @@ class _VariantsSectionState extends State<_VariantsSection> {
                   border: Border.all(color: AppTheme.borderColor),
                 ),
                 child: Text('${variants.length}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textSecondary, fontSize: 10)),
               ),
             ],
@@ -1694,7 +1703,7 @@ class _VariantsSectionState extends State<_VariantsSection> {
               ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(8),
-                side: const BorderSide(color: AppTheme.borderColor),
+                side: BorderSide(color: AppTheme.borderColor),
               ),
               onSelected: (w) => setState(() => _cardWidth = w),
               itemBuilder: (_) => _sizeOptions
@@ -1891,7 +1900,7 @@ class _VariantCard extends StatelessWidget {
         content: Text(
           'Permanently delete "${variant.displayName}"? '
           'All files in this variant folder will be removed.',
-          style: const TextStyle(
+          style: TextStyle(
               color: AppTheme.textSecondary, fontSize: 13),
         ),
         actions: [
@@ -1936,7 +1945,7 @@ class _VariantCard extends StatelessWidget {
       color: AppTheme.bgCard,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: AppTheme.borderColor),
+        side: BorderSide(color: AppTheme.borderColor),
       ),
       onSelected: (action) async {
         switch (action) {
@@ -2028,7 +2037,7 @@ class _VariantCard extends StatelessWidget {
                     ? Image.file(thumbFile!, fit: BoxFit.cover)
                     : Container(
                         color: AppTheme.bgCard,
-                        child: const Icon(Icons.person_outline_rounded,
+                        child: Icon(Icons.person_outline_rounded,
                             size: 26, color: AppTheme.borderColor),
                       ),
               ),
@@ -2040,7 +2049,7 @@ class _VariantCard extends StatelessWidget {
                 children: [
                   Text(
                     variant.displayName,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 10,
                         fontWeight: FontWeight.w500),
@@ -2065,7 +2074,7 @@ class _VariantCard extends StatelessWidget {
                     if (variant.originalFileName != null)
                       Text(
                         variant.originalFileName!,
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary, fontSize: 8),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -2074,7 +2083,7 @@ class _VariantCard extends StatelessWidget {
                     if (variant.lastSyncedAt != null)
                       Text(
                         _formatSyncDate(variant.lastSyncedAt!),
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary, fontSize: 8),
                         textAlign: TextAlign.center,
                       ),
@@ -2153,7 +2162,7 @@ class _AddVariantButton extends StatelessWidget {
               width: 1,
               style: BorderStyle.solid),
         ),
-        child: const Column(
+        child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.add_rounded, size: 22, color: AppTheme.textSecondary),
@@ -2166,5 +2175,312 @@ class _AddVariantButton extends StatelessWidget {
       ),
     );
   }
+}
+
+// ── Border picker ─────────────────────────────────────────────────
+
+class _BorderPicker extends StatelessWidget {
+  final CharacterData character;
+  const _BorderPicker({required this.character});
+
+  // Effects that have hardcoded colors — color picker disabled when these are active
+  static const _noColorEffects = {
+    TierBorderEffect.rainbow,
+    TierBorderEffect.auroraPulse,
+    TierBorderEffect.prismaticSparkle,
+    TierBorderEffect.holographic,
+  };
+
+  static const _presetColors = [
+    Color(0xFFFFFFFF), // white
+    Color(0xFFFFD700), // gold
+    Color(0xFFC0C0C0), // silver
+    Color(0xFFFF4444), // red
+    Color(0xFFFF8C00), // orange
+    Color(0xFF44DDAA), // teal
+    Color(0xFF4488FF), // blue
+    Color(0xFFCC44FF), // purple
+    Color(0xFFFF44AA), // pink
+  ];
+
+  bool get _isCustom =>
+      character.customBorderEffect != null || character.customBorderColor != null;
+
+  TierBorderEffect get _currentEffect {
+    if (character.customBorderEffect != null) {
+      return TierBorderEffect.values.firstWhere(
+        (e) => e.name == character.customBorderEffect,
+        orElse: () => TierBorderEffect.shimmer,
+      );
+    }
+    final t = character.tier;
+    return t != null ? AppTheme.effectForTier(t) : TierBorderEffect.shimmer;
+  }
+
+  Color get _currentColor {
+    if (character.customBorderColor != null) {
+      return Color(character.customBorderColor!);
+    }
+    final t = character.tier;
+    return t != null ? Color(t.colorValue) : AppTheme.accent;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.read<CharacterProvider>();
+
+    return SizedBox(
+      width: 240,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Border',
+              style: TextStyle(
+                  color: AppTheme.textSecondary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500)),
+          const SizedBox(height: 6),
+
+          // ── Mode toggle ────────────────────────────────────
+          Row(
+            children: [
+              Expanded(
+                child: _ModeChip(
+                  label: 'Use tier',
+                  selected: !_isCustom,
+                  onTap: () => provider.setCustomBorder(character),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: _ModeChip(
+                  label: 'Custom',
+                  selected: _isCustom,
+                  onTap: () {
+                    if (!_isCustom) {
+                      provider.setCustomBorder(character,
+                          effect: _currentEffect.name,
+                          color: _currentColor.toARGB32());
+                    }
+                  },
+                ),
+              ),
+            ],
+          ),
+
+          if (_isCustom) ...[
+            const SizedBox(height: 10),
+
+            // ── Effect dropdown ────────────────────────────────
+            Text('Effect',
+                style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500)),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.bgSurface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.borderColor),
+              ),
+              child: DropdownButton<TierBorderEffect>(
+                value: _currentEffect,
+                isExpanded: true,
+                underline: const SizedBox.shrink(),
+                dropdownColor: AppTheme.bgCard,
+                style: TextStyle(
+                    color: AppTheme.textPrimary, fontSize: 12),
+                icon: Icon(Icons.expand_more_rounded,
+                    color: AppTheme.textSecondary, size: 16),
+                items: TierBorderEffect.values
+                    .map((fx) => DropdownMenuItem(
+                          value: fx,
+                          child: Text(fx.displayName),
+                        ))
+                    .toList(),
+                onChanged: (fx) {
+                  if (fx == null) return;
+                  final clearColor = _noColorEffects.contains(fx);
+                  provider.setCustomBorder(character,
+                      effect: fx.name,
+                      color: clearColor ? null : character.customBorderColor);
+                },
+              ),
+            ),
+
+            const SizedBox(height: 10),
+
+            // ── Color swatches ─────────────────────────────────
+            Opacity(
+              opacity: _noColorEffects.contains(_currentEffect) ? 0.35 : 1.0,
+              child: IgnorePointer(
+                ignoring: _noColorEffects.contains(_currentEffect),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+            Text('Color',
+                style: TextStyle(
+                    color: AppTheme.textSecondary,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w500)),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                ..._presetColors.map((c) {
+                  final selected = character.customBorderColor != null &&
+                      Color(character.customBorderColor!) == c;
+                  return GestureDetector(
+                    onTap: () => provider.setCustomBorder(character,
+                        effect: character.customBorderEffect,
+                        color: c.toARGB32()),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 120),
+                      width: 22,
+                      height: 22,
+                      decoration: BoxDecoration(
+                        color: c,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: selected
+                              ? AppTheme.accent
+                              : AppTheme.borderColor,
+                          width: selected ? 2 : 1,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+                // No color (use tier/default) — clears both overrides
+                GestureDetector(
+                  onTap: () => provider.setCustomBorder(character),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 120),
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: AppTheme.bgSurface,
+                      border: Border.all(
+                        color: character.customBorderColor == null
+                            ? AppTheme.accent
+                            : AppTheme.borderColor,
+                        width: character.customBorderColor == null ? 2 : 1,
+                      ),
+                    ),
+                    child: CustomPaint(painter: _CrossPainter(
+                        color: AppTheme.textSecondary)),
+                  ),
+                ),
+                // Custom color wheel
+                GestureDetector(
+                  onTap: () async {
+                    final picked = await showColorPickerDialog(
+                      context,
+                      _currentColor,
+                      title: 'Border color',
+                    );
+                    if (picked != null && context.mounted) {
+                      provider.setCustomBorder(character,
+                          effect: character.customBorderEffect,
+                          color: picked.toARGB32());
+                    }
+                  },
+                  child: Container(
+                    width: 22,
+                    height: 22,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppTheme.borderColor),
+                      gradient: const SweepGradient(colors: [
+                        Color(0xFFFF0000), Color(0xFFFFFF00),
+                        Color(0xFF00FF00), Color(0xFF00FFFF),
+                        Color(0xFF0000FF), Color(0xFFFF00FF),
+                        Color(0xFFFF0000),
+                      ]),
+                    ),
+                    child: Center(
+                      child: Icon(Icons.add,
+                          size: 12, color: Colors.white),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+  const _ModeChip(
+      {required this.label,
+      required this.selected,
+      required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        padding: const EdgeInsets.symmetric(vertical: 6),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppTheme.accent.withOpacity(0.12)
+              : AppTheme.bgSurface,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: selected ? AppTheme.accent : AppTheme.borderColor,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? AppTheme.accent : AppTheme.textSecondary,
+              fontSize: 11,
+              fontWeight:
+                  selected ? FontWeight.w600 : FontWeight.normal,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CrossPainter extends CustomPainter {
+  final Color color;
+  const _CrossPainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    const pad = 5.0;
+    canvas.drawLine(Offset(pad, pad),
+        Offset(size.width - pad, size.height - pad), paint);
+    canvas.drawLine(Offset(size.width - pad, pad),
+        Offset(pad, size.height - pad), paint);
+  }
+
+  @override
+  bool shouldRepaint(_CrossPainter old) => old.color != color;
 }
 

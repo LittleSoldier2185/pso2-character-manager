@@ -46,6 +46,10 @@ void main() async {
     await _initDataService();
     final accent = await DataService.instance.getAccentColor();
     if (accent != null) AppTheme.setAccent(accent);
+    final bg = await DataService.instance.getBgColor();
+    if (bg != null) AppTheme.setBgBase(bg);
+    final tierEffects = await DataService.instance.getTierEffects();
+    if (tierEffects != null) AppTheme.loadTierEffects(tierEffects);
   }
 
   runApp(
@@ -82,9 +86,10 @@ class PSO2App extends StatefulWidget {
   final bool needsMigration;
   const PSO2App({super.key, required this.needsMigration});
 
-  // Notifier so settings screen can trigger theme rebuild
-  static final themeNotifier = ValueNotifier<Color>(AppTheme.accent);
-  static final updateNotifier = ValueNotifier<AppUpdateInfo?>(null);
+  // Notifiers so settings screen can trigger theme rebuild
+  static final themeNotifier       = ValueNotifier<Color>(AppTheme.accent);
+  static final bgNotifier          = ValueNotifier<Color>(AppTheme.bgBase);
+  static final updateNotifier      = ValueNotifier<AppUpdateInfo?>(null);
 
   @override
   State<PSO2App> createState() => _PSO2AppState();
@@ -98,11 +103,15 @@ class _PSO2AppState extends State<PSO2App> {
     super.initState();
     _showMigration = widget.needsMigration;
     PSO2App.themeNotifier.addListener(_onThemeChange);
+    PSO2App.bgNotifier.addListener(_onThemeChange);
+    AppTheme.tierEffectNotifier.addListener(_onThemeChange);
   }
 
   @override
   void dispose() {
     PSO2App.themeNotifier.removeListener(_onThemeChange);
+    PSO2App.bgNotifier.removeListener(_onThemeChange);
+    AppTheme.tierEffectNotifier.removeListener(_onThemeChange);
     super.dispose();
   }
 
@@ -115,6 +124,13 @@ class _PSO2AppState extends State<PSO2App> {
       AppTheme.setAccent(accent);
       PSO2App.themeNotifier.value = accent;
     }
+    final bg = await DataService.instance.getBgColor();
+    if (bg != null) {
+      AppTheme.setBgBase(bg);
+      PSO2App.bgNotifier.value = bg;
+    }
+    final tierEffects = await DataService.instance.getTierEffects();
+    if (tierEffects != null) AppTheme.loadTierEffects(tierEffects);
     if (!mounted) return;
     // Now it is safe to load all characters.
     context.read<CharacterProvider>().loadAll();
@@ -139,6 +155,9 @@ class _PSO2AppState extends State<PSO2App> {
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
+  // ponytail: static notifier lets child screens switch tabs without callback drilling
+  static final switchTabNotifier = ValueNotifier<int>(-1);
+
   @override
   State<MainShell> createState() => _MainShellState();
 }
@@ -146,24 +165,30 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
 
-  final List<Widget> _screens = const [
-    HomeScreen(),
-    CollectionsScreen(),
-    AppliedScreen(),
-    GalleryScreen(),
-    TagsScreen(),
-    ScanScreen(),
-  ];
+  void _onSwitchTab() {
+    final idx = MainShell.switchTabNotifier.value;
+    if (idx >= 0) {
+      setState(() => _currentIndex = idx);
+      MainShell.switchTabNotifier.value = -1;
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    MainShell.switchTabNotifier.addListener(_onSwitchTab);
     AppUpdateService.check()
         .then((info) => PSO2App.updateNotifier.value = info);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final shownPatchNotes = await _maybeShowPatchNotes();
       if (!shownPatchNotes) await _maybePromptGameFolder();
     });
+  }
+
+  @override
+  void dispose() {
+    MainShell.switchTabNotifier.removeListener(_onSwitchTab);
+    super.dispose();
   }
 
   Future<bool> _maybeShowPatchNotes() async {
@@ -197,32 +222,42 @@ class _MainShellState extends State<MainShell> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppTheme.bgDark,
-      body: Column(
-        children: [
-          const AppTitleBar(),
-          Expanded(
-            child: DropTarget(
-              onDragDone: (details) =>
-                  _handleDroppedFiles(details.files.map((f) => f.path).toList()),
-              child: Row(
-                children: [
-                  _Sidebar(
-                    currentIndex: _currentIndex,
-                    onSelect: (i) => setState(() => _currentIndex = i),
-                  ),
-                  Expanded(
-                    child: IndexedStack(
-                      index: _currentIndex,
-                      children: _screens,
+    return AnimatedBuilder(
+      animation: Listenable.merge([PSO2App.bgNotifier, PSO2App.themeNotifier]),
+      builder: (context, _) => Scaffold(
+        backgroundColor: AppTheme.bgDark,
+        body: Column(
+          children: [
+            const AppTitleBar(),
+            Expanded(
+              child: DropTarget(
+                onDragDone: (details) =>
+                    _handleDroppedFiles(details.files.map((f) => f.path).toList()),
+                child: Row(
+                  children: [
+                    _Sidebar(
+                      currentIndex: _currentIndex,
+                      onSelect: (i) => setState(() => _currentIndex = i),
                     ),
-                  ),
-                ],
+                    Expanded(
+                      child: IndexedStack(
+                        index: _currentIndex,
+                        children: [
+                          HomeScreen(),
+                          CollectionsScreen(),
+                          AppliedScreen(),
+                          GalleryScreen(),
+                          TagsScreen(),
+                          ScanScreen(),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -250,7 +285,7 @@ class _SidebarState extends State<_Sidebar> {
       curve: Curves.easeInOut,
       width: _collapsed ? 56 : 200,
       clipBehavior: Clip.hardEdge,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: AppTheme.bgCard,
         border: Border(right: BorderSide(color: AppTheme.borderColor)),
       ),
@@ -270,7 +305,7 @@ class _SidebarState extends State<_Sidebar> {
                       onTap: () => setState(() => _collapsed = false),
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           border: Border(
                               bottom:
                                   BorderSide(color: AppTheme.borderColor)),
@@ -292,7 +327,7 @@ class _SidebarState extends State<_Sidebar> {
                                   color: AppTheme.accent, size: 16),
                             ),
                             const SizedBox(height: 5),
-                            const Icon(Icons.chevron_right_rounded,
+                            Icon(Icons.chevron_right_rounded,
                                 color: AppTheme.textSecondary, size: 14),
                           ],
                         ),
@@ -301,7 +336,7 @@ class _SidebarState extends State<_Sidebar> {
                   else
                     Container(
                       padding: const EdgeInsets.fromLTRB(14, 10, 6, 10),
-                      decoration: const BoxDecoration(
+                      decoration: BoxDecoration(
                         border: Border(
                             bottom:
                                 BorderSide(color: AppTheme.borderColor)),
@@ -327,7 +362,7 @@ class _SidebarState extends State<_Sidebar> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                const Text('Character Manager',
+                                Text('Character Manager',
                                     style: TextStyle(
                                         color: AppTheme.textPrimary,
                                         fontSize: 11,
@@ -337,7 +372,7 @@ class _SidebarState extends State<_Sidebar> {
                                   valueListenable: PSO2App.updateNotifier,
                                   builder: (_, update, child) {
                                     if (update == null) {
-                                      return const Text('v$kAppVersion',
+                                      return Text('v$kAppVersion',
                                           style: TextStyle(
                                               color: AppTheme.textSecondary,
                                               fontSize: 10));
@@ -351,7 +386,7 @@ class _SidebarState extends State<_Sidebar> {
                                           mainAxisSize: MainAxisSize.min,
                                           children: [
                                             Text('v$kAppVersion',
-                                                style: const TextStyle(
+                                                style: TextStyle(
                                                     color:
                                                         AppTheme.textSecondary,
                                                     fontSize: 10)),
@@ -388,7 +423,7 @@ class _SidebarState extends State<_Sidebar> {
                           GestureDetector(
                             onTap: () =>
                                 setState(() => _collapsed = true),
-                            child: const SizedBox(
+                            child: SizedBox(
                               width: 26,
                               height: 26,
                               child: Icon(Icons.chevron_left_rounded,
@@ -474,7 +509,7 @@ class _SidebarState extends State<_Sidebar> {
                                 fontWeight: FontWeight.w500),
                           ),
                           const SizedBox(width: 4),
-                          const Text(
+                          Text(
                             'characters applied',
                             style: TextStyle(
                                 color: AppTheme.textSecondary,
@@ -491,11 +526,7 @@ class _SidebarState extends State<_Sidebar> {
                     label: 'Settings',
                     selected: false,
                     collapsed: narrow,
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                          builder: (_) => const SettingsScreen()),
-                    ),
+                    onTap: () => SettingsScreen.show(context),
                   ),
 
                   if (narrow)
@@ -516,7 +547,7 @@ class _SidebarState extends State<_Sidebar> {
                             color: AppTheme.accent,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Center(
+                          child: Center(
                             child: Icon(Icons.add,
                                 color: AppTheme.bgDark, size: 18),
                           ),
@@ -559,7 +590,7 @@ class _SidebarState extends State<_Sidebar> {
       padding: const EdgeInsets.fromLTRB(12, 4, 12, 2),
       child: Text(
         text.toUpperCase(),
-        style: const TextStyle(
+        style: TextStyle(
           color: AppTheme.textSecondary,
           fontSize: 10,
           letterSpacing: 0.07,
@@ -811,7 +842,7 @@ class _GameFolderPromptDialog extends StatelessWidget {
                   Icon(Icons.sports_esports_outlined,
                       size: 20, color: AppTheme.accent),
                   const SizedBox(width: 10),
-                  const Text(
+                  Text(
                     'Set up game folder',
                     style: TextStyle(
                         color: AppTheme.textPrimary,
@@ -821,7 +852,7 @@ class _GameFolderPromptDialog extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 14),
-              const Text(
+              Text(
                 'Point the app to your PSO2 character data folder to enable '
                 'Apply to game, Scan folder, and Sync from game features.',
                 style: TextStyle(
@@ -841,11 +872,7 @@ class _GameFolderPromptDialog extends StatelessWidget {
                   ElevatedButton(
                     onPressed: () {
                       Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const SettingsScreen()),
-                      );
+                      SettingsScreen.show(context);
                     },
                     child: const Text('Open Settings'),
                   ),

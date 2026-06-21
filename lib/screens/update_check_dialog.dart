@@ -125,7 +125,7 @@ class _UpdateCheckDialogState extends State<UpdateCheckDialog> {
                     children: [
                       Icon(Icons.sync_rounded, size: 16, color: AppTheme.accent),
                       const SizedBox(width: 8),
-                      const Text(
+                      Text(
                         'Sync from game',
                         style: TextStyle(
                             color: AppTheme.textPrimary,
@@ -153,7 +153,7 @@ class _UpdateCheckDialogState extends State<UpdateCheckDialog> {
                       const Spacer(),
                       IconButton(
                         onPressed: () => Navigator.pop(context),
-                        icon: const Icon(Icons.close,
+                        icon: Icon(Icons.close,
                             size: 16, color: AppTheme.textSecondary),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
@@ -161,12 +161,12 @@ class _UpdateCheckDialogState extends State<UpdateCheckDialog> {
                     ],
                   ),
                 ),
-                const Divider(height: 1, color: AppTheme.borderColor),
+                Divider(height: 1, color: AppTheme.borderColor),
 
                 // ── Body ───────────────────────────────────────────
                 Expanded(
                   child: _checking
-                      ? const Center(
+                      ? Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
@@ -189,7 +189,7 @@ class _UpdateCheckDialogState extends State<UpdateCheckDialog> {
                                       color: AppTheme.accent
                                           .withValues(alpha: 0.35)),
                                   const SizedBox(height: 14),
-                                  const Text(
+                                  Text(
                                     'All files are up to date',
                                     style: TextStyle(
                                         color: AppTheme.textPrimary,
@@ -197,7 +197,7 @@ class _UpdateCheckDialogState extends State<UpdateCheckDialog> {
                                         fontWeight: FontWeight.w500),
                                   ),
                                   const SizedBox(height: 6),
-                                  const Text(
+                                  Text(
                                     'No newer versions found in the game folder',
                                     style: TextStyle(
                                         color: AppTheme.textSecondary,
@@ -230,7 +230,7 @@ class _UpdateCheckDialogState extends State<UpdateCheckDialog> {
                 ),
 
                 // ── Footer ─────────────────────────────────────────
-                const Divider(height: 1, color: AppTheme.borderColor),
+                Divider(height: 1, color: AppTheme.borderColor),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
                   child: Row(
@@ -275,13 +275,13 @@ class _UpdateCheckDialogState extends State<UpdateCheckDialog> {
                   size: 44,
                   color: AppTheme.accentGold.withValues(alpha: 0.5)),
               const SizedBox(height: 16),
-              const Text('Game folder not set',
+              Text('Game folder not set',
                   style: TextStyle(
                       color: AppTheme.textPrimary,
                       fontSize: 15,
                       fontWeight: FontWeight.w500)),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Set your PSO2 game folder path in Settings to enable update detection.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
@@ -357,7 +357,7 @@ class _UpdateRow extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(c.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 13,
                         fontWeight: FontWeight.w500),
@@ -370,14 +370,14 @@ class _UpdateRow extends StatelessWidget {
                         style: TextStyle(color: raceColor, fontSize: 10)),
                     const SizedBox(width: 4),
                     Text('· ${entry.variantDisplayName}',
-                        style: const TextStyle(
+                        style: TextStyle(
                             color: AppTheme.textSecondary, fontSize: 10),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis),
                     const SizedBox(width: 6),
                     Text(
                       '· updated ${formatDate(entry.gameModified)}',
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textSecondary, fontSize: 10),
                     ),
                   ],

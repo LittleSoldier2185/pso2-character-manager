@@ -108,7 +108,7 @@ class _ProgressDialog extends StatelessWidget {
             children: [
               const Icon(Icons.system_update_alt_rounded, size: 36, color: AppTheme.accentGold),
               const SizedBox(height: 16),
-              const Text('Updating…',
+              Text('Updating…',
                   style: TextStyle(color: AppTheme.textPrimary, fontSize: 15, fontWeight: FontWeight.w500)),
               const SizedBox(height: 20),
               ValueListenableBuilder<double>(
@@ -123,7 +123,7 @@ class _ProgressDialog extends StatelessWidget {
               ValueListenableBuilder<String>(
                 valueListenable: status,
                 builder: (_, s, __) => Text(s,
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
               ),
             ],
           ),

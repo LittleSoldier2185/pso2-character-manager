@@ -1,10 +1,12 @@
 import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
 import '../models/character_data.dart';
 import '../providers/character_provider.dart';
 import '../theme/app_theme.dart';
+import 'tier_border.dart';
 
 /// Shows the CS:GO-style case-opening spinner and returns the picked character.
 /// Returns null if the user dismissed without clicking "View character".
@@ -19,7 +21,7 @@ Future<CharacterData?> showCharacterSpinner(
 
   return showDialog<CharacterData>(
     context: context,
-    barrierDismissible: false,
+    barrierDismissible: true,
     barrierColor: Colors.black.withOpacity(0.75),
     builder: (_) => _SpinnerDialog(characters: characters, provider: provider),
   );
@@ -39,12 +41,12 @@ const Duration _spinDuration = Duration(milliseconds: 3800);
 class _SpinEntry {
   final CharacterData character;
   final VariantData variant;
+  final String? thumbnailPath; // cached — avoids dir scan on every frame
 
-  const _SpinEntry(this.character, this.variant);
+  _SpinEntry(this.character, this.variant)
+      : thumbnailPath = character.thumbnailForVariant(variant.folderName);
 
   bool get isMainVariant => variant.folderName == character.mainVariant;
-  String? get thumbnailPath =>
-      character.thumbnailForVariant(variant.folderName);
   String get key => '${character.id}:${variant.folderName}';
 }
 
@@ -95,10 +97,11 @@ class _SpinnerDialog extends StatefulWidget {
 }
 
 class _SpinnerDialogState extends State<_SpinnerDialog>
-    with SingleTickerProviderStateMixin {
+    with TickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<double>   _anim;
   late ScrollController    _scrollCtrl;
+  Ticker? _idleTicker;
 
   List<_SpinEntry> _reel       = [];
   int              _winnerIndex = 0;
@@ -123,13 +126,34 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
     _scrollCtrl = ScrollController();
     _ctrl = AnimationController(vsync: this, duration: _spinDuration);
     _buildReel();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _startIdleDrift());
   }
 
   @override
   void dispose() {
+    _idleTicker?.dispose();
     _ctrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
+  }
+
+  void _startIdleDrift() {
+    _idleTicker?.dispose();
+    Duration? prev;
+    _idleTicker = createTicker((elapsed) {
+      if (prev != null && _scrollCtrl.hasClients) {
+        final dt = (elapsed - prev!).inMicroseconds / 1e6;
+        final next = _scrollCtrl.offset + dt * 35; // 35 px/sec
+        final max  = _scrollCtrl.position.maxScrollExtent;
+        _scrollCtrl.jumpTo(next.clamp(0.0, max));
+      }
+      prev = elapsed;
+    })..start();
+  }
+
+  void _stopIdleDrift() {
+    _idleTicker?.dispose();
+    _idleTicker = null;
   }
 
   // ── Eligible entries after applying filters ────────────────────
@@ -233,13 +257,15 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
 
   void _spin() {
     if (_spinning || _eligible.isEmpty) return;
+    _stopIdleDrift();
     setState(() { _spinning = true; _done = false; });
 
+    final startOffset    = _scrollCtrl.hasClients ? _scrollCtrl.offset : 0.0;
     final viewportCentre = _reelViewportWidth / 2;
     final cardCentre     = _winnerIndex * _cardStride + _cardWidth / 2;
     final targetOffset   = (cardCentre - viewportCentre).clamp(0.0, double.infinity);
 
-    _anim = Tween<double>(begin: 0, end: targetOffset).animate(
+    _anim = Tween<double>(begin: startOffset, end: targetOffset).animate(
       CurvedAnimation(parent: _ctrl, curve: Curves.easeOutExpo),
     );
 
@@ -259,6 +285,7 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
     if (_spinning) return;
     _buildReel();
     if (_scrollCtrl.hasClients) _scrollCtrl.jumpTo(0);
+    _startIdleDrift();
     _spin();
   }
 
@@ -324,7 +351,9 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
   Widget build(BuildContext context) {
     final eligible = _eligible;
 
-    return Dialog(
+    return PopScope(
+      canPop: !_spinning,
+      child: Dialog(
       backgroundColor: AppTheme.bgCard,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
@@ -347,7 +376,7 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
                   Icon(Icons.casino_outlined,
                       color: AppTheme.accent, size: 18),
                   const SizedBox(width: 8),
-                  const Text('Random character',
+                  Text('Random character',
                       style: TextStyle(
                           color: AppTheme.textPrimary,
                           fontSize: 15,
@@ -414,7 +443,7 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
                         _dismissed = true;
                         Navigator.pop(context, null);
                       },
-                      icon: const Icon(Icons.close,
+                      icon: Icon(Icons.close,
                           size: 16, color: AppTheme.textSecondary),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
@@ -447,7 +476,7 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
             ],
 
             const SizedBox(height: 14),
-            const Divider(height: 1, color: AppTheme.borderColor),
+            Divider(height: 1, color: AppTheme.borderColor),
             const SizedBox(height: 16),
 
             // ── Reel area ────────────────────────────────────
@@ -463,7 +492,7 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
                               color:
                                   AppTheme.textSecondary.withOpacity(0.4)),
                           const SizedBox(height: 10),
-                          const Text('No characters match your filters',
+                          Text('No characters match your filters',
                               style: TextStyle(
                                   color: AppTheme.textSecondary,
                                   fontSize: 13)),
@@ -483,29 +512,43 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
                           alignment: Alignment.center,
                           children: [
                             // Cards
-                            ShaderMask(
-                              shaderCallback: (rect) => LinearGradient(
-                                colors: [
-                                  AppTheme.bgCard,
-                                  Colors.transparent,
-                                  Colors.transparent,
-                                  AppTheme.bgCard,
-                                ],
-                                stops: const [0.0, 0.15, 0.85, 1.0],
-                              ).createShader(rect),
-                              blendMode: BlendMode.dstOut,
-                              child: ListView.builder(
-                                controller: _scrollCtrl,
-                                scrollDirection: Axis.horizontal,
-                                physics:
-                                    const NeverScrollableScrollPhysics(),
-                                padding: const EdgeInsets.symmetric(
-                                    vertical: 8),
-                                itemCount: _reel.length,
-                                itemBuilder: (_, i) => Padding(
-                                  padding: const EdgeInsets.only(
-                                      right: _cardSpacing),
-                                  child: _ReelCard(entry: _reel[i]),
+                            ListView.builder(
+                              controller: _scrollCtrl,
+                              scrollDirection: Axis.horizontal,
+                              physics: const NeverScrollableScrollPhysics(),
+                              padding: const EdgeInsets.symmetric(vertical: 8),
+                              itemCount: _reel.length,
+                              itemBuilder: (_, i) => Padding(
+                                padding: const EdgeInsets.only(right: _cardSpacing),
+                                child: _ReelCard(entry: _reel[i], isSpinning: _spinning),
+                              ),
+                            ),
+                            // Edge fades — cheaper than ShaderMask (no offscreen layer)
+                            Positioned(
+                              left: 0, top: 0, bottom: 0,
+                              child: IgnorePointer(
+                                child: Container(
+                                  width: 72,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(colors: [
+                                      AppTheme.bgCard,
+                                      AppTheme.bgCard.withOpacity(0),
+                                    ]),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              right: 0, top: 0, bottom: 0,
+                              child: IgnorePointer(
+                                child: Container(
+                                  width: 72,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(colors: [
+                                      AppTheme.bgCard.withOpacity(0),
+                                      AppTheme.bgCard,
+                                    ]),
+                                  ),
                                 ),
                               ),
                             ),
@@ -597,7 +640,7 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
                                 const SizedBox(height: 6),
                                 Text(
                                   '${eligible.length} eligible to spin',
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                       color: AppTheme.textSecondary,
                                       fontSize: 11),
                                 ),
@@ -613,7 +656,7 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
           },
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -724,7 +767,7 @@ class _FilterPanelState extends State<_FilterPanel> {
             ),
           ),
 
-          const Divider(height: 1, color: AppTheme.borderColor),
+          Divider(height: 1, color: AppTheme.borderColor),
 
           // Whitelist
           _FilterSection(
@@ -745,7 +788,7 @@ class _FilterPanelState extends State<_FilterPanel> {
             },
           ),
 
-          const Divider(height: 1, color: AppTheme.borderColor),
+          Divider(height: 1, color: AppTheme.borderColor),
 
           // Blacklist
           _FilterSection(
@@ -771,7 +814,7 @@ class _FilterPanelState extends State<_FilterPanel> {
             width: double.infinity,
             padding:
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               border: Border(
                   top: BorderSide(color: AppTheme.borderColor)),
               borderRadius: BorderRadius.vertical(
@@ -912,13 +955,13 @@ class _FilterSection extends StatelessWidget {
           TextField(
             controller: controller,
             onChanged: onType,
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppTheme.textPrimary, fontSize: 12),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: const TextStyle(
+              hintStyle: TextStyle(
                   color: AppTheme.textSecondary, fontSize: 12),
-              prefixIcon: const Icon(Icons.search_rounded,
+              prefixIcon: Icon(Icons.search_rounded,
                   size: 14, color: AppTheme.textSecondary),
               contentPadding:
                   const EdgeInsets.symmetric(vertical: 6),
@@ -968,7 +1011,7 @@ class _FilterSection extends StatelessWidget {
                                     fontSize: 12)),
                           ),
                           if (alreadyAdded)
-                            const Text('added',
+                            Text('added',
                                 style: TextStyle(
                                     color: AppTheme.textSecondary,
                                     fontSize: 10)),
@@ -1028,54 +1071,60 @@ class _TickPainter extends CustomPainter {
 
 class _ReelCard extends StatelessWidget {
   final _SpinEntry entry;
-  const _ReelCard({required this.entry});
+  final bool isSpinning;
+  const _ReelCard({required this.entry, this.isSpinning = false});
 
   @override
   Widget build(BuildContext context) {
-    final c        = entry.character;
-    final thumb    = entry.thumbnailPath;
-    final hasThumb = thumb != null && File(thumb).existsSync();
+    final c         = entry.character;
+    final thumb     = entry.thumbnailPath;
     final raceColor = AppTheme.raceColor(c.race);
+    final tier      = c.tier;
+    final hasCustom = c.customBorderEffect != null || c.customBorderColor != null;
+    final hasBorder = tier != null || hasCustom;
 
-    return Container(
+    // Static tier color used during spinning (no animated widget overhead)
+    final staticBorderColor = hasBorder
+        ? (c.customBorderColor != null
+            ? Color(c.customBorderColor!)
+            : tier != null ? Color(tier.colorValue) : AppTheme.accent)
+        : raceColor.withOpacity(0.35);
+
+    final card = Container(
       width: _cardWidth,
       height: _cardHeight,
       decoration: BoxDecoration(
         color: AppTheme.bgSurface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: raceColor.withOpacity(0.35)),
+        border: (!isSpinning && hasBorder) ? null : Border.all(
+          color: staticBorderColor,
+          width: hasBorder ? 1.5 : 1.0,
+        ),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(7),
         child: Column(
           children: [
             Expanded(
-              child: hasThumb
+              child: thumb != null
                   ? Image.file(
                       File(thumb),
                       fit: BoxFit.cover,
                       width: double.infinity,
+                      errorBuilder: (_, __, ___) => _placeholder(raceColor),
                     )
-                  : Container(
-                      color: AppTheme.bgSurface,
-                      child: Center(
-                        child: Icon(Icons.person_outline,
-                            size: 40,
-                            color: raceColor.withOpacity(0.35)),
-                      ),
-                    ),
+                  : _placeholder(raceColor),
             ),
             Container(
               width: double.infinity,
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
               color: AppTheme.bgCard,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     c.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 10,
                         fontWeight: FontWeight.w500),
@@ -1086,7 +1135,7 @@ class _ReelCard extends StatelessWidget {
                     const SizedBox(height: 1),
                     Text(
                       entry.variant.displayName,
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textSecondary, fontSize: 8),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -1104,8 +1153,46 @@ class _ReelCard extends StatelessWidget {
         ),
       ),
     );
+
+    // During spinning: static border only (no animated widgets = no lag)
+    if (isSpinning || !hasBorder) return card;
+
+    // Stopped: show animated tier/custom border.
+    // SizedBox locks dimensions so effects with padding don't shift card stride.
+    return ValueListenableBuilder<int>(
+      valueListenable: AppTheme.tierEffectNotifier,
+      builder: (context, _, __) {
+        final TierBorderEffect effect;
+        if (c.customBorderEffect != null) {
+          effect = TierBorderEffect.values.firstWhere(
+            (e) => e.name == c.customBorderEffect,
+            orElse: () => tier != null ? AppTheme.effectForTier(tier) : TierBorderEffect.shimmer,
+          );
+        } else {
+          effect = tier != null ? AppTheme.effectForTier(tier) : TierBorderEffect.shimmer;
+        }
+        final Color effectColor = c.customBorderColor != null
+            ? Color(c.customBorderColor!)
+            : tier != null ? Color(tier.colorValue) : AppTheme.accent;
+
+        return SizedBox(
+          width: _cardWidth,
+          height: _cardHeight,
+          child: buildTierBorder(effect: effect, color: effectColor, child: card),
+        );
+      },
+    );
   }
 }
+
+// ── Reel card placeholder ──────────────────────────────────────────
+
+Widget _placeholder(Color raceColor) => ColoredBox(
+      color: AppTheme.bgSurface,
+      child: Center(
+        child: Icon(Icons.person_outline, size: 40, color: raceColor.withOpacity(0.35)),
+      ),
+    );
 
 // ── Result panel ───────────────────────────────────────────────────
 
@@ -1161,7 +1248,7 @@ class _ResultPanel extends StatelessWidget {
               const SizedBox(height: 2),
               Text(
                 winner.variant.displayName,
-                style: const TextStyle(
+                style: TextStyle(
                     color: AppTheme.textSecondary, fontSize: 12),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -1177,7 +1264,7 @@ class _ResultPanel extends StatelessWidget {
                     label: const Text('Reroll', style: TextStyle(fontSize: 12)),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppTheme.textSecondary,
-                      side: const BorderSide(color: AppTheme.borderColor),
+                      side: BorderSide(color: AppTheme.borderColor),
                       padding: const EdgeInsets.symmetric(
                           horizontal: 14, vertical: 8),
                     ),

@@ -71,7 +71,7 @@ class _MigrationScreenState extends State<MigrationScreen> {
                     fontWeight: FontWeight.w600),
               ),
               const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Migrating your character data to the new format.\nPlease do not close the app.',
                 style:
                     TextStyle(color: AppTheme.textSecondary, fontSize: 13),
@@ -86,7 +86,7 @@ class _MigrationScreenState extends State<MigrationScreen> {
                 const SizedBox(height: 12),
                 Text(
                   _status,
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textSecondary, fontSize: 12),
                 ),
               ] else ...[
@@ -102,14 +102,14 @@ class _MigrationScreenState extends State<MigrationScreen> {
                 const SizedBox(height: 12),
                 Text(
                   _status,
-                  style: const TextStyle(
+                  style: TextStyle(
                       color: AppTheme.textPrimary, fontSize: 13),
                 ),
                 if (_result!.hasErrors) ...[
                   const SizedBox(height: 8),
                   Text(
                     'Failed: ${_result!.failed.join(', ')}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textSecondary, fontSize: 12),
                   ),
                 ],

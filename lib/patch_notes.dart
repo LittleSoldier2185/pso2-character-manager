@@ -2,37 +2,135 @@ import 'package:flutter/material.dart';
 import 'services/app_update_service.dart';
 import 'theme/app_theme.dart';
 
-const kPatchNotes = '''
-v1.3.4 — In-app auto-update
+// ── Data ──────────────────────────────────────────────────────────
 
+class _PatchEntry {
+  final String version;
+  final String title;
+  final String body;
+  const _PatchEntry(this.version, this.title, this.body);
+}
+
+const _entries = [
+  _PatchEntry('1.4.0', 'Tier effects, Theme customisation & Tag manager', '''
+IMPROVEMENTS
+
+• Tag manager — three quality-of-life improvements:
+  Click any tag card to filter the home screen by that tag instantly.
+  Unused stat card now has a sweep button to delete all unused tags at once.
+  Stats row always shows global counts — no longer affected by the search filter.
+
+• Accent colour — pick any colour from the wheel or choose a quick preset
+  (Cyan, Azure, Purple, Gold, Green, Coral) in Settings → Appearance.
+
+• Background colour — new picker lets you set the app's background tone.
+  Choose from twelve presets — six dark (Midnight, Void, Navy, Dusk, Grove,
+  Ember) and six light (Pearl, Ivory, Mist, Petal, Sage, Slate) — or open
+  the colour wheel for a fully custom colour. Light backgrounds automatically
+  flip to dark text and lighter borders so everything stays readable. All
+  three background levels (dark, card, surface) are derived automatically
+  from the chosen base.
+
+• Both colour changes apply instantly across the whole UI with no restart.
+
+• Tier borders — each tier now has a unique animated border on character cards:
+  S rainbow, A gold shimmer, B silver shimmer, C copper shimmer, D plain gray.
+  B tier updated from green → silver, C tier updated from blue → copper.
+
+• Settings panel reworked into a floating glassmorphism overlay dialog that
+  can be opened from any page without navigating away.
+
+• Settings dialog redesigned with a sidebar nav (Appearance / Cards / Storage / About).
+  The panel is now 16:9 and scales responsively with the window.
+
+• Tier border animations are now customisable per tier in Settings → Cards.
+  Each tier has its own pool of 3–4 unique effects to choose from:
+
+  S — Rainbow, Aurora Pulse, Prismatic Sparkle, Holographic
+  A — Shimmer, Pulse Glow, Double Ring, Molten
+  B — Shimmer, Double Ring, Electric Arc, Particle Sparks
+  C — Shimmer, Dashed Rotation, Plasma Wave, Ember Glow
+  D — None, Subtle Pulse, Dim Flicker
+
+  Changes apply via an Apply button and persist across sessions.
+
+PER-CHARACTER BORDER CUSTOMISATION
+
+• Custom border — each character detail screen now has a Border section
+  below the tier picker. Toggle between "Use tier" (follows global tier
+  settings) and "Custom" to override independently.
+
+• Effect — a dropdown with all sixteen effects. Selecting one updates
+  the card immediately.
+
+• Color — nine presets, a colour wheel, and a ✕ swatch to clear back
+  to the tier colour.
+
+• S-tier effects (Rainbow, Aurora Pulse, Prismatic Sparkle, Holographic)
+  disable the colour row — those effects use built-in colour cycles.
+
+• No tier required — characters without a tier can still have a custom
+  border (falls back to accent colour and Shimmer effect).
+
+IMPORT & ADD CHARACTER
+
+• Add as variant — Add Character and both import flows (bundle and scan)
+  now let you add a file as a variant of an existing character instead of
+  creating a new top-level entry. A two-card mode selector appears at the
+  top: "New character" keeps the existing behaviour; "Add as variant"
+  shows a searchable character picker and a variant name field.
+
+• Import bundle rework — the import dialog now opens with the mode
+  selector upfront. Conflict resolution only appears in "New character"
+  mode. The Import button stays disabled until a target is chosen in
+  variant mode.
+
+• Scan import dialog — clicking Import on a scan result now opens a
+  dialog instead of importing immediately with no options. "Import all"
+  in the toolbar still bulk-imports without a dialog.
+
+• Thumbnail picker — all three import flows include an optional thumbnail
+  field. Click to pick an image or drag and drop one directly onto the
+  preview box (jpg, jpeg, png, gif, webp, bmp).
+
+SEARCH REWORK
+
+• Keyword search — the search bar now filters live as you type. No more
+  "type keyword + Enter" token workflow. Just type and the grid updates
+  instantly. The X button clears the search.
+
+• Tag filtering remains in the filter panel (tune icon) along with tier,
+  race, gender, collection, and applied status filters.
+
+• The Apply button and keyword token pills have been removed.
+
+APPLIED SCREEN
+
+• Applied screen now shows one card per applied variant. If a character
+  has both a main file and a variant applied, each appears as its own card
+  with its own thumbnail and the variant name labelled below the character
+  name.
+'''),
+  _PatchEntry('1.3.4', 'In-app auto-update', '''
 IMPROVEMENT
 • The app can now update itself. When a new version is detected, clicking
   the update button downloads the release zip, extracts it, and restarts
   the app automatically — no browser or manual install needed.
   Falls back to opening the GitHub release page if no zip is attached.
-
-────────────────────────────────────────
-
-v1.3.3 — Migration backup
-
+'''),
+  _PatchEntry('1.3.3', 'Migration backup', '''
 IMPROVEMENT
 • Migration now backs up all your old data before creating the new structure.
   Hive database files, character data files, thumbnails, and gallery images
-  are saved to Documents\\PSO2CharacterManager\\hive_backup\ before anything
+  are saved to Documents\\PSO2CharacterManager\\hive_backup before anything
   is moved or converted. You can delete this folder once migration looks good.
-
-────────────────────────────────────────
-
-v1.3.2 — Hotfix
-
+'''),
+  _PatchEntry('1.3.2', 'Hotfix', '''
 BUG FIXES
 • Fixed "Check for updates" not detecting new versions when GitHub release
   tags use a capital V (e.g. V1.3.1 instead of v1.3.1).
-
-────────────────────────────────────────
-
-v1.3.1 — Hotfix
-
+'''),
+  _PatchEntry('1.3.1', 'Hotfix', '''
 BUG FIX
 • Fixed data migration not working for users upgrading from v1.2.0.
   The migration was searching for Hive database files in the wrong folder
@@ -42,9 +140,8 @@ BUG FIX
 If you already ran v1.3.0 and your data appeared empty, delete the app data
 folder (Documents\\PSO2CharacterManager) and re-launch v1.3.1 — it will
 re-read the original v1.2.0 files and migrate them properly.
-
-────────────────────────────────────────
-
+'''),
+  _PatchEntry('1.3.0', 'Major overhaul', '''
 MAJOR UPDATES
 
 • PSO2 Salon Limit Removed
@@ -97,79 +194,334 @@ INFRASTRUCTURE
 
 • Storage migrated from Hive binary database to human-readable JSON files.
   Migration runs automatically on first launch — no data is lost.
-''';
+'''),
+];
+
+// ── Body parser ───────────────────────────────────────────────────
+
+List<InlineSpan> _parseBody(String body, TextStyle base, TextStyle bold) {
+  final spans = <InlineSpan>[];
+  for (final line in body.split('\n')) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) {
+      spans.add(TextSpan(text: '\n', style: base));
+      continue;
+    }
+    // All-caps section headers (IMPROVEMENTS, BUG FIXES, MAJOR UPDATES…)
+    if (trimmed == trimmed.toUpperCase() && trimmed.contains(RegExp(r'[A-Z]'))) {
+      spans.add(TextSpan(text: '$line\n', style: bold));
+      continue;
+    }
+    // Bullet lines: bold up to the em-dash; rest is normal
+    if (trimmed.startsWith('•')) {
+      final dashIdx = line.indexOf('—');
+      if (dashIdx != -1) {
+        spans.add(TextSpan(children: [
+          TextSpan(text: line.substring(0, dashIdx), style: bold),
+          TextSpan(text: '${line.substring(dashIdx)}\n', style: base),
+        ]));
+      } else {
+        // No dash: the whole bullet line is the feature name
+        spans.add(TextSpan(text: '$line\n', style: bold));
+      }
+      continue;
+    }
+    spans.add(TextSpan(text: '$line\n', style: base));
+  }
+  return spans;
+}
+
+// ── Dialog ────────────────────────────────────────────────────────
 
 void showPatchNotesDialog(BuildContext context) {
   showDialog(
     context: context,
-    builder: (_) => Dialog(
+    builder: (_) => const _PatchNotesDialog(),
+  );
+}
+
+class _PatchNotesDialog extends StatefulWidget {
+  const _PatchNotesDialog();
+
+  @override
+  State<_PatchNotesDialog> createState() => _PatchNotesDialogState();
+}
+
+class _PatchNotesDialogState extends State<_PatchNotesDialog> {
+  _PatchEntry _selected = _entries.first;
+  final _searchCtrl = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchCtrl.dispose();
+    super.dispose();
+  }
+
+  List<_PatchEntry> get _filtered => _query.isEmpty
+      ? _entries
+      : _entries
+          .where((e) =>
+              e.version.contains(_query) ||
+              e.title.toLowerCase().contains(_query.toLowerCase()))
+          .toList();
+
+  @override
+  Widget build(BuildContext context) {
+    final screen = MediaQuery.of(context).size;
+    final w = (screen.width * 0.75).clamp(520.0, 1100.0);
+    final h = (w * 9 / 16).clamp(0.0, screen.height * 0.90);
+    final fontSize = (13.0 + (w - 520) / (1100 - 520) * 4).clamp(13.0, 17.0);
+    final filtered = _filtered;
+
+    return Dialog(
       backgroundColor: AppTheme.bgCard,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: SizedBox(
-        width: 520,
-        height: 520,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 18, 12, 12),
-              child: Row(
-                children: [
-                  Icon(Icons.auto_awesome_rounded,
-                      size: 16, color: AppTheme.accent),
-                  const SizedBox(width: 8),
-                  Text(
-                    "What's new in v$kAppVersion",
-                    style: const TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500),
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close,
-                        size: 16, color: AppTheme.textSecondary),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                  ),
-                ],
-              ),
-            ),
-            const Divider(height: 1, color: AppTheme.borderColor),
-
-            // Body
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
-                child: Text(
-                  kPatchNotes.trim(),
-                  style: const TextStyle(
-                      color: AppTheme.textSecondary,
-                      fontSize: 12,
-                      height: 1.7),
+        width: w,
+        height: h,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(context),
+              Divider(height: 1, color: AppTheme.borderColor),
+              Expanded(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildSidebar(filtered),
+                    VerticalDivider(
+                        width: 1, thickness: 1, color: AppTheme.borderColor),
+                    Expanded(child: _buildContent(fontSize)),
+                  ],
                 ),
               ),
-            ),
+              Divider(height: 1, color: AppTheme.borderColor),
+              _buildFooter(context),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-            // Footer
-            const Divider(height: 1, color: AppTheme.borderColor),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(context),
-                    child: const Text('Got it'),
-                  ),
-                ],
-              ),
+  Widget _buildHeader(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 14, 16),
+        child: Row(
+          children: [
+            Icon(Icons.auto_awesome_rounded, size: 16, color: AppTheme.accent),
+            const SizedBox(width: 8),
+            Text(
+              'Patch notes',
+              style: TextStyle(
+                  color: AppTheme.textPrimary,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w500),
+            ),
+            const Spacer(),
+            IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: Icon(Icons.close,
+                  size: 16, color: AppTheme.textSecondary),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
             ),
           ],
         ),
+      );
+
+  Widget _buildSidebar(List<_PatchEntry> filtered) => SizedBox(
+        width: 172,
+        child: Column(
+          children: [
+            // Search bar
+            Padding(
+              padding: const EdgeInsets.all(10),
+              child: TextField(
+                controller: _searchCtrl,
+                onChanged: (v) => setState(() {
+                  _query = v;
+                  final nf = v.isEmpty
+                      ? _entries
+                      : _entries
+                          .where((e) =>
+                              e.version.contains(v) ||
+                              e.title.toLowerCase().contains(v.toLowerCase()))
+                          .toList();
+                  if (nf.isNotEmpty && !nf.contains(_selected)) {
+                    _selected = nf.first;
+                  }
+                }),
+                style: TextStyle(
+                    color: AppTheme.textPrimary, fontSize: 12),
+                decoration: InputDecoration(
+                  hintText: 'Search…',
+                  hintStyle: TextStyle(
+                      color: AppTheme.textSecondary, fontSize: 12),
+                  prefixIcon: Icon(Icons.search_rounded,
+                      size: 14, color: AppTheme.textSecondary),
+                  prefixIconConstraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 10, vertical: 8),
+                  filled: true,
+                  fillColor: AppTheme.bgSurface,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide:
+                        BorderSide(color: AppTheme.borderColor),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide:
+                        BorderSide(color: AppTheme.borderColor),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: AppTheme.accent),
+                  ),
+                ),
+              ),
+            ),
+            Divider(height: 1, color: AppTheme.borderColor),
+            // Version list
+            Expanded(
+              child: filtered.isEmpty
+                  ? Center(
+                      child: Text('No results',
+                          style: TextStyle(
+                              color: AppTheme.textSecondary, fontSize: 12)),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 6, horizontal: 6),
+                      itemCount: filtered.length,
+                      itemBuilder: (_, i) {
+                        final e = filtered[i];
+                        final active = e == _selected;
+                        return _VersionItem(
+                          entry: e,
+                          selected: active,
+                          onTap: () => setState(() => _selected = e),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildContent(double fontSize) {
+    final base = TextStyle(
+        color: AppTheme.textSecondary, fontSize: fontSize, height: 1.7);
+    final bold = base.copyWith(
+        color: AppTheme.textPrimary, fontWeight: FontWeight.w600);
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'v${_selected.version} — ${_selected.title}',
+            style: TextStyle(
+              color: AppTheme.textPrimary,
+              fontSize: fontSize + 1,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text.rich(TextSpan(
+              children: _parseBody(_selected.body.trim(), base, bold))),
+        ],
       ),
-    ),
-  );
+    );
+  }
+
+  Widget _buildFooter(BuildContext context) => Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Got it'),
+            ),
+          ],
+        ),
+      );
+}
+
+// ── Sidebar item ──────────────────────────────────────────────────
+
+class _VersionItem extends StatefulWidget {
+  final _PatchEntry entry;
+  final bool selected;
+  final VoidCallback onTap;
+  const _VersionItem(
+      {required this.entry, required this.selected, required this.onTap});
+
+  @override
+  State<_VersionItem> createState() => _VersionItemState();
+}
+
+class _VersionItemState extends State<_VersionItem> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = widget.selected;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.symmetric(vertical: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: active
+                ? AppTheme.accent.withValues(alpha: 0.15)
+                : _hovered
+                    ? AppTheme.bgSurface
+                    : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: active
+                  ? AppTheme.accent.withValues(alpha: 0.4)
+                  : Colors.transparent,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'v${widget.entry.version}',
+                style: TextStyle(
+                  color: active ? AppTheme.accent : AppTheme.textPrimary,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                widget.entry.title,
+                style: TextStyle(
+                  color: active
+                      ? AppTheme.accent.withValues(alpha: 0.8)
+                      : AppTheme.textSecondary,
+                  fontSize: 11,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

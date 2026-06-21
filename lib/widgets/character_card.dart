@@ -1,34 +1,42 @@
 import 'dart:io';
+import 'dart:math' show pi;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/character_data.dart';
 import '../providers/character_provider.dart';
 import '../theme/app_theme.dart';
 import 'tag_chip.dart';
+import 'tier_border.dart';
 
 class CharacterCard extends StatelessWidget {
   final CharacterData character;
   final VoidCallback onTap;
   final int cardSize; // 0=S,1=M,2=L,3=XL
+  final String? variantFolderName;
 
   const CharacterCard({
     super.key,
     required this.character,
     required this.onTap,
     this.cardSize = 2,
+    this.variantFolderName,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Consumer<CharacterProvider>(
+    return ValueListenableBuilder<int>(
+      valueListenable: AppTheme.tierEffectNotifier,
+      builder: (context, _, __) => Consumer<CharacterProvider>(
       builder: (context, provider, _) {
         final tier = character.tier;
+        final isSTier = tier == CharacterTier.s;
+        final hasTierBorder = tier != null;
         final tierColor = tier != null ? Color(tier.colorValue) : null;
 
         final borderColor = tierColor ?? (character.isApplied ? AppTheme.accent : AppTheme.borderColor);
         final borderWidth = (character.isApplied || tier != null) ? 1.5 : 1.0;
 
-        return InkWell(
+        final card = InkWell(
           onTap: onTap,
           borderRadius: BorderRadius.circular(10),
           child: AnimatedContainer(
@@ -36,7 +44,7 @@ class CharacterCard extends StatelessWidget {
             decoration: BoxDecoration(
               color: AppTheme.bgCard,
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(
+              border: hasTierBorder ? null : Border.all(
                 color: borderColor,
                 width: borderWidth,
               ),
@@ -71,24 +79,26 @@ class CharacterCard extends StatelessWidget {
                           Positioned(
                             top: 20,
                             left: 5,
-                            child: Container(
-                              width: 20,
-                              height: 20,
-                              decoration: BoxDecoration(
-                                color: Color(tier.bgColorValue),
-                                borderRadius: BorderRadius.circular(5),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  tier.label,
-                                  style: TextStyle(
-                                    color: Color(tier.colorValue),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w700,
+                            child: isSTier
+                                ? const _RainbowBadge()
+                                : Container(
+                                    width: 20,
+                                    height: 20,
+                                    decoration: BoxDecoration(
+                                      color: Color(tier.bgColorValue),
+                                      borderRadius: BorderRadius.circular(5),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        tier.label,
+                                        style: TextStyle(
+                                          color: Color(tier.colorValue),
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ),
                                   ),
-                                ),
-                              ),
-                            ),
                           ),
                         // Favourite heart — bottom left
                         Positioned(
@@ -128,7 +138,7 @@ class CharacterCard extends StatelessWidget {
                                 color: AppTheme.accent,
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              child: const Text(
+                              child: Text(
                                 'Applied',
                                 style: TextStyle(
                                     color: AppTheme.bgDark,
@@ -157,7 +167,7 @@ class CharacterCard extends StatelessWidget {
                                 // Name — always shown
                                 Text(
                                   character.name,
-                                  style: const TextStyle(
+                                  style: TextStyle(
                                     color: AppTheme.textPrimary,
                                     fontWeight: FontWeight.w500,
                                     fontSize: 12,
@@ -165,6 +175,17 @@ class CharacterCard extends StatelessWidget {
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
+                                // Variant label
+                                if (variantFolderName != null) Builder(builder: (context) {
+                                  final v = character.variants.where((v) => v.folderName == variantFolderName).firstOrNull;
+                                  if (v == null) return const SizedBox.shrink();
+                                  return Text(
+                                    v.displayName,
+                                    style: TextStyle(color: AppTheme.accent, fontSize: 9),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  );
+                                }),
                                 // Race/gender — M, L, XL
                                 if (cardSize >= 1) ...[
                                   const SizedBox(height: 2),
@@ -182,7 +203,7 @@ class CharacterCard extends StatelessWidget {
                                   const SizedBox(height: 2),
                                   Text(
                                     character.description,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                         color: AppTheme.textSecondary,
                                         fontSize: 10),
                                     maxLines: 1,
@@ -224,20 +245,54 @@ class CharacterCard extends StatelessWidget {
             ),
           ),
         );
+
+        final hasCustom = character.customBorderEffect != null ||
+            character.customBorderColor != null;
+        if (tier == null && !hasCustom) return card;
+
+        final TierBorderEffect effect;
+        if (character.customBorderEffect != null) {
+          effect = TierBorderEffect.values.firstWhere(
+            (e) => e.name == character.customBorderEffect,
+            orElse: () => tier != null
+                ? AppTheme.effectForTier(tier)
+                : TierBorderEffect.shimmer,
+          );
+        } else {
+          effect = tier != null
+              ? AppTheme.effectForTier(tier)
+              : TierBorderEffect.shimmer;
+        }
+
+        final Color effectColor = character.customBorderColor != null
+            ? Color(character.customBorderColor!)
+            : tier != null
+                ? Color(tier.colorValue)
+                : AppTheme.accent;
+
+        return buildTierBorder(
+          effect: effect,
+          color: effectColor,
+          child: card,
+        );
       },
+      ),
     );
   }
 
   Widget _buildThumbnail() {
-    if (character.thumbnailPath != null) {
-      final file = File(character.thumbnailPath!);
+    final thumbPath = variantFolderName != null
+        ? character.thumbnailForVariant(variantFolderName!)
+        : character.thumbnailPath;
+    if (thumbPath != null) {
+      final file = File(thumbPath);
       if (file.existsSync()) {
         return Image.file(
           file,
           fit: BoxFit.cover,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             if (wasSynchronouslyLoaded || frame != null) return child;
-            return const ColoredBox(color: AppTheme.bgSurface);
+            return ColoredBox(color: AppTheme.bgSurface);
           },
         );
       }
@@ -249,6 +304,84 @@ class CharacterCard extends StatelessWidget {
             size: 36,
             color:
                 AppTheme.raceColor(character.race).withOpacity(0.35)),
+      ),
+    );
+  }
+}
+
+// ── S tier badge ──────────────────────────────────────────────────
+
+class _RainbowBadge extends StatefulWidget {
+  const _RainbowBadge();
+
+  @override
+  State<_RainbowBadge> createState() => _RainbowBadgeState();
+}
+
+class _RainbowBadgeState extends State<_RainbowBadge>
+    with SingleTickerProviderStateMixin, WidgetsBindingObserver {
+  late final AnimationController _ctrl;
+
+  static const _colors = [
+    Color(0xFFFF0000),
+    Color(0xFFFF7700),
+    Color(0xFFFFFF00),
+    Color(0xFF00CC00),
+    Color(0xFF0077FF),
+    Color(0xFF8B00FF),
+    Color(0xFFFF0000),
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _ctrl = AnimationController(vsync: this, duration: const Duration(seconds: 3))
+      ..repeat();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    state == AppLifecycleState.resumed ? _ctrl.repeat() : _ctrl.stop();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _ctrl,
+      builder: (_, __) => Container(
+        width: 20,
+        height: 20,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(5),
+          gradient: SweepGradient(
+            colors: _colors,
+            transform: GradientRotation(_ctrl.value * 2 * pi),
+          ),
+        ),
+        child: const Center(
+          child: Text(
+            'S',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              shadows: [
+                Shadow(color: Colors.black, blurRadius: 2, offset: Offset( 1,  1)),
+                Shadow(color: Colors.black, blurRadius: 2, offset: Offset(-1, -1)),
+                Shadow(color: Colors.black, blurRadius: 2, offset: Offset( 1, -1)),
+                Shadow(color: Colors.black, blurRadius: 2, offset: Offset(-1,  1)),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

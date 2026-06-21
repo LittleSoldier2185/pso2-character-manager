@@ -114,7 +114,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
             // ── Top bar ───────────────────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 color: AppTheme.bgCard,
                 border: Border(
                     bottom: BorderSide(color: AppTheme.borderColor)),
@@ -125,7 +125,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     items.isEmpty
                         ? 'Gallery'
                         : '${items.length} image${items.length == 1 ? '' : 's'}',
-                    style: const TextStyle(
+                    style: TextStyle(
                         color: AppTheme.textPrimary,
                         fontSize: 14,
                         fontWeight: FontWeight.w500),
@@ -142,7 +142,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
-                      side: const BorderSide(color: AppTheme.borderColor),
+                      side: BorderSide(color: AppTheme.borderColor),
                     ),
                     onSelected: (i) async {
                       setState(() => _sizeIndex = i);
@@ -167,7 +167,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                       onChanged: (v) => setState(() => _search = v),
                       decoration: InputDecoration(
                         hintText: 'Search by character…',
-                        prefixIcon: const Icon(Icons.search_rounded,
+                        prefixIcon: Icon(Icons.search_rounded,
                             size: 15, color: AppTheme.textSecondary),
                         suffixIcon: _search.isNotEmpty
                             ? IconButton(
@@ -180,7 +180,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                             const EdgeInsets.symmetric(vertical: 8),
                         isDense: true,
                       ),
-                      style: const TextStyle(
+                      style: TextStyle(
                           color: AppTheme.textPrimary, fontSize: 12),
                     ),
                   ),
@@ -193,7 +193,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
               Container(
                 height: 44,
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                decoration: const BoxDecoration(
+                decoration: BoxDecoration(
                   color: AppTheme.bgCard,
                   border: Border(
                       bottom: BorderSide(color: AppTheme.borderColor)),
@@ -309,12 +309,12 @@ class _GalleryScreenState extends State<GalleryScreen> {
             noImagesAtAll
                 ? 'No gallery images yet'
                 : 'No images match your filter',
-            style: const TextStyle(
+            style: TextStyle(
                 color: AppTheme.textSecondary, fontSize: 15),
           ),
           if (noImagesAtAll) ...[
             const SizedBox(height: 8),
-            const Text(
+            Text(
               'Open a character and add images to its gallery',
               style: TextStyle(
                   color: AppTheme.textSecondary, fontSize: 12),
@@ -331,7 +331,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
       builder: (_) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
         title: const Text('Remove image?'),
-        content: const Text(
+        content: Text(
             'This will permanently delete the image file from storage.',
             style: TextStyle(
                 color: AppTheme.textSecondary, fontSize: 13)),
@@ -490,7 +490,7 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
       color: AppTheme.bgCard,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: AppTheme.borderColor),
+        side: BorderSide(color: AppTheme.borderColor),
       ),
       position: RelativeRect.fromLTRB(
           pos.dx, pos.dy, size.width - pos.dx, size.height - pos.dy),
@@ -523,7 +523,7 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
       Icon(icon, size: 14, color: AppTheme.textSecondary),
       const SizedBox(width: 8),
       Text(label,
-          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+          style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
     ],
   );
 
@@ -705,9 +705,9 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
                   width: double.infinity,
                   padding:
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 5),
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: AppTheme.bgCard,
-                    borderRadius: BorderRadius.vertical(
+                    borderRadius: const BorderRadius.vertical(
                         bottom: Radius.circular(7)),
                   ),
                   child: Column(
@@ -730,7 +730,7 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
                             Expanded(
                               child: Text(
                                 widget.character!.name,
-                                style: const TextStyle(
+                                style: TextStyle(
                                     color: AppTheme.textPrimary,
                                     fontSize: 10,
                                     fontWeight: FontWeight.w500),
@@ -741,7 +741,7 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
                             if (widget.onCharacterTap != null)
                               GestureDetector(
                                 onTap: widget.onCharacterTap,
-                                child: const Icon(
+                                child: Icon(
                                     Icons.open_in_new_rounded,
                                     size: 9,
                                     color: AppTheme.textSecondary),
@@ -753,7 +753,7 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
                         const SizedBox(height: 2),
                         Text(
                           resolvedPath.split(r'\').last.split('/').last,
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 9),
                           maxLines: 1,
@@ -765,7 +765,7 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
                         const SizedBox(height: 2),
                         Text(
                           'Added ${_formatDate(widget.item.addedAt)}',
-                          style: const TextStyle(
+                          style: TextStyle(
                               color: AppTheme.textSecondary,
                               fontSize: 9),
                         ),

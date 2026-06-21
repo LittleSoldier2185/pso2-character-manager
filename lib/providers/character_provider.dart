@@ -114,8 +114,7 @@ class CharacterProvider extends ChangeNotifier {
   Timer? _syncTimer;
 
   // Filter state
-  List<String> _pendingTokens       = [];
-  List<String> _appliedTokens       = [];
+  String _searchQuery               = '';
   String? _filterRace;
   String? _filterGender;
   String? _filterCollectionId;
@@ -147,8 +146,7 @@ class CharacterProvider extends ChangeNotifier {
     try { return _tags.firstWhere((t) => t.id == id); } catch (_) { return null; }
   }
 
-  List<String> get pendingTokens        => _pendingTokens;
-  List<String> get appliedTokens        => _appliedTokens;
+  String       get searchQuery           => _searchQuery;
   String?      get filterRace           => _filterRace;
   String?      get filterGender         => _filterGender;
   String?      get filterCollectionId   => _filterCollectionId;
@@ -173,14 +171,6 @@ class CharacterProvider extends ChangeNotifier {
   List<CharacterData> get charactersWithUpdates =>
       _characters.where((c) => _pendingUpdates.containsKey(c.id)).toList();
 
-  bool get hasPendingChanges {
-    if (_pendingTokens.length != _appliedTokens.length) return true;
-    for (int i = 0; i < _pendingTokens.length; i++) {
-      if (_pendingTokens[i] != _appliedTokens[i]) return true;
-    }
-    return false;
-  }
-
   List<CharacterData> get appliedCharacters =>
       _characters.where((c) => c.isApplied).toList()
         ..sort((a, b) => a.name.compareTo(b.name));
@@ -189,15 +179,8 @@ class CharacterProvider extends ChangeNotifier {
 
   List<CharacterData> get filteredCharacters {
     var list = _characters.where((c) {
-      if (_appliedTokens.isNotEmpty) {
-        if (_matchAll) {
-          if (!_appliedTokens.every((t) =>
-              c.name.toLowerCase().contains(t.toLowerCase()))) return false;
-        } else {
-          if (!_appliedTokens.any((t) =>
-              c.name.toLowerCase().contains(t.toLowerCase()))) return false;
-        }
-      }
+      if (_searchQuery.isNotEmpty &&
+          !c.name.toLowerCase().contains(_searchQuery.toLowerCase())) return false;
       if (_filterRace != null && c.race != _filterRace) return false;
       if (_filterGender != null && c.gender != _filterGender) return false;
       if (_filterCollectionId != null &&
@@ -222,7 +205,7 @@ class CharacterProvider extends ChangeNotifier {
   }
 
   bool get hasActiveFilters =>
-      _appliedTokens.isNotEmpty ||
+      _searchQuery.isNotEmpty ||
       _filterRace != null ||
       _filterGender != null ||
       _filterCollectionId != null ||
@@ -233,7 +216,7 @@ class CharacterProvider extends ChangeNotifier {
 
   int get activeFilterCount {
     int n = 0;
-    if (_appliedTokens.isNotEmpty)       n++;
+    if (_searchQuery.isNotEmpty)         n++;
     if (_filterRace != null)             n++;
     if (_filterGender != null)           n++;
     if (_filterCollectionId != null)     n++;
@@ -494,6 +477,14 @@ class CharacterProvider extends ChangeNotifier {
 
   Future<void> setTier(CharacterData character, CharacterTier? tier) async {
     character.tier = tier;
+    await _data.saveCharacter(character);
+    notifyListeners();
+  }
+
+  Future<void> setCustomBorder(CharacterData character,
+      {String? effect, int? color}) async {
+    character.customBorderEffect = effect;
+    character.customBorderColor = color;
     await _data.saveCharacter(character);
     notifyListeners();
   }
@@ -977,6 +968,7 @@ class CharacterProvider extends ChangeNotifier {
     required BundlePreview preview,
     required String characterName,
     String? customFileName,
+    String? sourceThumbnailPath,
   }) async {
     try {
       final id          = _uuid.v4();
@@ -1012,6 +1004,14 @@ class CharacterProvider extends ChangeNotifier {
       character.mainVariantData!.lastSyncedAt = DateTime.now();
       await _data.saveCharacter(character);
 
+      if (sourceThumbnailPath != null) {
+        await _data.copyThumbnailToVariant(
+          characterFolderPath: character.folderPath,
+          variantFolderName: variantName,
+          sourcePath: sourceThumbnailPath,
+        );
+      }
+
       // Save gallery items
       final galleryItems = result.galleryFileNames
           .map((fn) => GalleryItemData(
@@ -1031,12 +1031,79 @@ class CharacterProvider extends ChangeNotifier {
     }
   }
 
+  Future<String?> importBundleAsVariant({
+    required BundlePreview preview,
+    required CharacterData character,
+    required String variantName,
+    String? customFileName,
+    String? sourceThumbnailPath,
+  }) async {
+    try {
+      final folderName        = _sanitize(variantName);
+      final variantFolderPath = p.join(character.folderPath, folderName);
+      final galleryFolderPath = p.join(character.folderPath, 'character_gallery');
+
+      final result = await ShareService.extractBundle(
+        bundleBytes:      preview.bundleBytes,
+        variantFolderPath: variantFolderPath,
+        galleryFolderPath: galleryFolderPath,
+        variantFolderName: folderName,
+        customFileName:   customFileName,
+      );
+      if (result == null) return 'Failed to extract bundle';
+
+      await _data.addVariant(
+        character:       character,
+        folderName:      folderName,
+        displayName:     variantName,
+        originalFileName: result.originalFileName,
+      );
+
+      if (sourceThumbnailPath != null) {
+        await _data.copyThumbnailToVariant(
+          characterFolderPath: character.folderPath,
+          variantFolderName: folderName,
+          sourcePath: sourceThumbnailPath,
+        );
+      }
+
+      if (result.galleryFileNames.isNotEmpty) {
+        final existing = _galleryCache[character.id] ?? [];
+        final now      = DateTime.now().millisecondsSinceEpoch;
+        final newItems = result.galleryFileNames.asMap().entries.map((e) =>
+            GalleryItemData(
+              id: '${now}_${e.key}',
+              characterId: character.id,
+              fileName: e.value,
+            )).toList();
+        final merged = [...existing, ...newItems];
+        await _data.saveGalleryItems(character, merged);
+        _galleryCache[character.id] = merged;
+      }
+
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return 'Import failed: $e';
+    }
+  }
+
   // ── Scan game folder ──────────────────────────────────────────────
 
   Future<List<String>> scanGameFolderForUnregistered() async {
     if (_gameFolderPath == null) return [];
-    final registered =
-        _characters.map((c) => c.gameFileName).toSet();
+    final registered = <String>{};
+    for (final c in _characters) {
+      // Include every variant's originalFileName, not just the main one
+      for (final v in c.variants) {
+        if (v.originalFileName != null && v.originalFileName!.isNotEmpty) {
+          registered.add(v.originalFileName!);
+        }
+      }
+      // Fallback for legacy entries that may lack originalFileName
+      final main = c.gameFileName;
+      if (main.isNotEmpty) registered.add(main);
+    }
     return _data.scanForUnregisteredFiles(_gameFolderPath!, registered);
   }
 
@@ -1170,28 +1237,10 @@ class CharacterProvider extends ChangeNotifier {
 
   // ── Search & Filter ───────────────────────────────────────────────
 
-  void addPendingToken(String token) {
-    final t = token.trim();
-    if (t.isEmpty || _pendingTokens.contains(t)) return;
-    _pendingTokens = [..._pendingTokens, t];
-    notifyListeners();
-  }
-
-  void removePendingToken(String token) {
-    _pendingTokens = _pendingTokens.where((t) => t != token).toList();
-    notifyListeners();
-  }
-
-  void applySearch() {
-    _appliedTokens = List.from(_pendingTokens);
+  void setSearchQuery(String query) {
+    _searchQuery = query;
     notifyListeners();
     if (_persistFilter) _persistCurrentFilter();
-  }
-
-  void clearTokens() {
-    _pendingTokens = [];
-    _appliedTokens = [];
-    notifyListeners();
   }
 
   void setFilterRace(String? race) {
@@ -1262,8 +1311,7 @@ class CharacterProvider extends ChangeNotifier {
   }
 
   void clearAllFilters() {
-    _pendingTokens      = [];
-    _appliedTokens      = [];
+    _searchQuery        = '';
     _filterRace         = null;
     _filterGender       = null;
     _filterCollectionId = null;
@@ -1286,7 +1334,7 @@ class CharacterProvider extends ChangeNotifier {
 
   void _persistCurrentFilter() {
     final state = {
-      'tokens': _appliedTokens,
+      'query': _searchQuery,
       'race': _filterRace,
       'gender': _filterGender,
       'applied': _filterApplied,
@@ -1301,8 +1349,9 @@ class CharacterProvider extends ChangeNotifier {
     if (raw == null) return;
     try {
       final j = jsonDecode(raw) as Map<String, dynamic>;
-      _appliedTokens = (j['tokens'] as List?)?.cast<String>() ?? [];
-      _pendingTokens = List.from(_appliedTokens);
+      // backward compat: old data used a 'tokens' list
+      _searchQuery   = j['query'] as String? ??
+          ((j['tokens'] as List?)?.cast<String>().join(' ') ?? '');
       _filterRace    = j['race'] as String?;
       _filterGender  = j['gender'] as String?;
       _filterApplied = j['applied'] as bool?;
@@ -1337,7 +1386,7 @@ class CharacterProvider extends ChangeNotifier {
       id: const Uuid().v4(),
       name: name,
       colorValue: color.toARGB32(),
-      tokens: List.from(_appliedTokens),
+      tokens: _searchQuery.isEmpty ? [] : [_searchQuery],
       race: _filterRace,
       gender: _filterGender,
       applied: _filterApplied,
@@ -1350,8 +1399,7 @@ class CharacterProvider extends ChangeNotifier {
   }
 
   void applyPreset(FilterPreset preset) {
-    _appliedTokens = List.from(preset.tokens);
-    _pendingTokens = List.from(preset.tokens);
+    _searchQuery   = preset.tokens.join(' ');
     _filterRace    = preset.race;
     _filterGender  = preset.gender;
     _filterApplied = preset.applied;
