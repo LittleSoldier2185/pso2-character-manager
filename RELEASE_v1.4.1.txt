@@ -1,0 +1,10 @@
+PSO2 Character Manager v1.4.1
+Bug Fix
+
+BUG FIXES
+
+• Auto-updater no longer gets stuck — the app now reopens automatically after
+  a successful update instead of silently stopping mid-install.
+
+• Version number now shows correctly after an update. Previously the displayed
+  version could remain at the old number even after the new files were installed.

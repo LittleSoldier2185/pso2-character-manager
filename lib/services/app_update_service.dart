@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 
-const kAppVersion = '1.4.0';
+// ponytail: set by main() via PackageInfo so pubspec.yaml is the only version source
+String kAppVersion = '0.0.0';
 
 class AppUpdateInfo {
   final String version;
