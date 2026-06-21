@@ -1,6 +1,7 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:provider/provider.dart';
 import '../main.dart';
 import '../models/character_data.dart';
@@ -206,6 +207,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       style: TextButton.styleFrom(
                           foregroundColor: AppTheme.textSecondary),
                       child: const Text('Close'),
+                    ),
+                    const SizedBox(width: 8),
+                    OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        launchUrl(Uri.parse(info.url), mode: LaunchMode.externalApplication);
+                      },
+                      icon: const Icon(Icons.open_in_browser_rounded, size: 14),
+                      label: const Text('Download manually'),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppTheme.textPrimary,
+                        side: BorderSide(color: AppTheme.borderColor),
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
                     ),
                     const SizedBox(width: 8),
                     ElevatedButton.icon(
