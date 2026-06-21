@@ -12,6 +12,15 @@ class _PatchEntry {
 }
 
 const _entries = [
+  _PatchEntry('1.4.1', 'Bug fix', '''
+BUG FIXES
+
+• Auto-updater — the app now reopens automatically after a successful update
+  instead of silently stopping mid-install.
+
+• Version number — now shows the correct version after an update instead of
+  continuing to display the old version number.
+'''),
   _PatchEntry('1.4.0', 'Tier effects, Theme customisation & Tag manager', '''
 IMPROVEMENTS
 

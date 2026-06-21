@@ -54,14 +54,27 @@ class AppUpdater {
       status.value = 'Installing…';
       progress.value = 0.95;
       final installDir = File(Platform.resolvedExecutable).parent.path;
-      final sourceDir = p.join(extractDir, 'PSO2CharacterManager');
+      final exeName = p.basename(Platform.resolvedExecutable);
+      // Locate the exe inside the extracted zip to find the actual source dir,
+      // regardless of whether the zip has a subfolder or files at root.
+      String sourceDir;
+      try {
+        final found = Directory(extractDir)
+            .listSync(recursive: true)
+            .whereType<File>()
+            .firstWhere((f) => p.basename(f.path).toLowerCase() == exeName.toLowerCase());
+        sourceDir = found.parent.path;
+      } catch (_) {
+        final sub = p.join(extractDir, 'PSO2CharacterManager');
+        sourceDir = Directory(sub).existsSync() ? sub : extractDir;
+      }
       final exePath = Platform.resolvedExecutable;
       final procName = p.basenameWithoutExtension(Platform.resolvedExecutable);
 
       final scriptPath = p.join(temp, 'pso2_updater.ps1');
       await File(scriptPath).writeAsString(
         'do { Start-Sleep 1 } until (-not (Get-Process -Name "$procName" -ErrorAction SilentlyContinue))\r\n'
-        'Copy-Item -Path "$sourceDir\\*" -Destination "$installDir" -Recurse -Force\r\n'
+        'try { Copy-Item -Path "$sourceDir\\*" -Destination "$installDir" -Recurse -Force -ErrorAction Stop } catch {}\r\n'
         'Start-Process "$exePath"\r\n'
         'Remove-Item \$PSCommandPath -Force\r\n',
       );

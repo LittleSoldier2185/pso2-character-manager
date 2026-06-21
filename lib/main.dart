@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:path/path.dart' as p;
@@ -29,6 +30,7 @@ import 'widgets/app_title_bar.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  kAppVersion = (await PackageInfo.fromPlatform()).version;
   await windowManager.ensureInitialized();
 
   // Hide native title bar; our custom _TitleBar widget replaces it.
