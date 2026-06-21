@@ -132,19 +132,25 @@ class AppUpdater {
         sourceDir = Directory(sub).existsSync() ? sub : extractDir;
       }
       final exePath = Platform.resolvedExecutable;
-      final procName = p.basenameWithoutExtension(Platform.resolvedExecutable);
+      final procName = p.basename(Platform.resolvedExecutable); // e.g. pso2_character_manager.exe
 
-      final scriptPath = p.join(temp, 'pso2_updater.ps1');
-      await File(scriptPath).writeAsString(
-        'do { Start-Sleep 1 } until (-not (Get-Process -Name "$procName" -ErrorAction SilentlyContinue))\r\n'
-        'try { Copy-Item -Path "$sourceDir\\*" -Destination "$installDir" -Recurse -Force -ErrorAction Stop } catch {}\r\n'
-        'Start-Process "$exePath"\r\n'
-        'Remove-Item \$PSCommandPath -Force\r\n',
+      // .bat + cmd start is more reliable than PowerShell on end-user machines
+      // (no execution policy, no startup delay, always available via cmd.exe).
+      final batPath = p.join(temp, 'pso2_updater.bat');
+      await File(batPath).writeAsString(
+        '@echo off\r\n'
+        ':wait\r\n'
+        'tasklist /FI "IMAGENAME eq $procName" 2>NUL | find /I "$procName" >NUL\r\n'
+        'if not ERRORLEVEL 1 (timeout /nobreak /t 1 >NUL & goto wait)\r\n'
+        'robocopy "$sourceDir" "$installDir" /E /IS /IT /NFL /NDL /NJH /NJS /NC /NS /NP\r\n'
+        'start "" "$exePath"\r\n'
+        '(goto) 2>NUL & del "%~f0"\r\n',
       );
 
+      // start "" /min creates a new minimised window fully detached from this process
       await Process.start(
-        'powershell',
-        ['-ExecutionPolicy', 'Bypass', '-NonInteractive', '-File', scriptPath],
+        'cmd.exe',
+        ['/c', 'start', '', '/min', 'cmd.exe', '/c', batPath],
         mode: ProcessStartMode.detached,
       );
 
