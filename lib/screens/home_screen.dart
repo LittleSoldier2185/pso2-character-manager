@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../main.dart';
@@ -6,7 +7,7 @@ import '../models/character_data.dart';
 import '../providers/character_provider.dart';
 import '../services/data_service.dart';
 import '../theme/app_theme.dart';
-import '../widgets/character_card.dart';
+import '../widgets/character_card.dart' show CharacterCard, ApplyToggleButton;
 import '../widgets/character_spinner.dart';
 import '../widgets/skeleton.dart';
 import 'character_detail_screen.dart';
@@ -20,7 +21,7 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  int _cardSize = 2; // 0=S,1=M,2=L,3=XL
+  int _cardSize = 2; // 0=S,1=M,2=L,3=XL,4=List
 
   static const List<double> _sizeExtents = [120, 160, 200, 260];
   static const List<double> _aspectRatios = [0.58, 0.62, 0.68, 0.72];
@@ -58,7 +59,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ? SkeletonCardGrid(cardSize: _cardSize)
                   : characters.isEmpty
                       ? _buildEmpty(provider)
-                      : _buildGrid(context, characters),
+                      : _cardSize == 4
+                          ? _buildList(context, characters)
+                          : _buildGrid(context, characters),
             ),
           ],
         );
@@ -81,6 +84,24 @@ class _HomeScreenState extends State<HomeScreen> {
         return CharacterCard(
           character: c,
           cardSize: _cardSize,
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+                builder: (_) => CharacterDetailScreen(character: c)),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildList(BuildContext context, List characters) {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      itemCount: characters.length,
+      itemBuilder: (context, index) {
+        final c = characters[index] as CharacterData;
+        return _CharacterListRow(
+          character: c,
           onTap: () => Navigator.push(
             context,
             MaterialPageRoute(
@@ -192,6 +213,7 @@ class _TopBarState extends State<_TopBar> {
       case 1: return Icons.grid_view_rounded;
       case 2: return Icons.view_agenda_outlined;
       case 3: return Icons.crop_free_rounded;
+      case 4: return Icons.view_list_rounded;
       default: return Icons.grid_view_rounded;
     }
   }
@@ -373,6 +395,9 @@ class _TopBarState extends State<_TopBar> {
                           Icons.grid_view_rounded, widget.cardSize),
                       _sizeMenuItem(0, 'Small',
                           Icons.grid_on_rounded, widget.cardSize),
+                      const PopupMenuDivider(),
+                      _sizeMenuItem(4, 'List view',
+                          Icons.view_list_rounded, widget.cardSize),
                     ],
                   ),
                   const SizedBox(width: 2),
@@ -551,6 +576,140 @@ class _SortButton extends StatelessWidget {
               ),
             )),
       ],
+    );
+  }
+}
+
+// ── Date helper ────────────────────────────────────────────────────
+
+String _fmtRelative(DateTime dt) {
+  final diff = DateTime.now().difference(dt);
+  if (diff.inDays == 0) return 'Today';
+  if (diff.inDays == 1) return 'Yesterday';
+  if (diff.inDays < 7) return '${diff.inDays}d ago';
+  if (diff.inDays < 30) return '${(diff.inDays / 7).floor()}w ago';
+  if (diff.inDays < 365) return '${(diff.inDays / 30).floor()}mo ago';
+  return '${(diff.inDays / 365).floor()}y ago';
+}
+
+// ── Compact list row ───────────────────────────────────────────────
+
+class _CharacterListRow extends StatelessWidget {
+  final CharacterData character;
+  final VoidCallback onTap;
+
+  const _CharacterListRow({required this.character, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final tier = character.tier;
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          border: Border(bottom: BorderSide(color: AppTheme.borderColor, width: 0.5)),
+        ),
+        child: Row(
+          children: [
+            // Thumbnail
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: SizedBox(
+                width: 40,
+                height: 40,
+                child: _buildThumb(),
+              ),
+            ),
+            const SizedBox(width: 10),
+            // Tier badge
+            if (tier != null) ...[
+              Container(
+                width: 18,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: Color(tier.bgColorValue),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Center(
+                  child: Text(
+                    tier.label,
+                    style: TextStyle(
+                      color: Color(tier.colorValue),
+                      fontSize: 9,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            // Name + meta
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    character.name,
+                    style: TextStyle(
+                      color: AppTheme.textPrimary,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    '${character.race} · ${character.gender[0]} · ${_fmtRelative(character.lastModifiedAt)}',
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            // Applied badge
+            if (character.isApplied)
+              Container(
+                margin: const EdgeInsets.only(right: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.accent,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'Applied',
+                  style: TextStyle(
+                    color: AppTheme.bgDark,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ApplyToggleButton(character: character),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildThumb() {
+    final thumbPath = character.thumbnailPath;
+    if (thumbPath != null && File(thumbPath).existsSync()) {
+      return Image.file(
+        File(thumbPath),
+        fit: BoxFit.cover,
+        frameBuilder: (_, child, frame, sync) =>
+            (sync || frame != null) ? child : ColoredBox(color: AppTheme.bgSurface),
+      );
+    }
+    return Container(
+      color: AppTheme.bgSurface,
+      child: Center(
+        child: Icon(Icons.person_outline,
+            size: 22, color: AppTheme.raceColor(character.race).withOpacity(0.4)),
+      ),
     );
   }
 }

@@ -105,10 +105,10 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
       context: context,
       builder: (_) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
-        title: const Text('Delete character?'),
+        title: const Text('Move to Recycle Bin?'),
         content: Text(
-            'Permanently delete "${widget.character.name}"? '
-            'The character file and thumbnail will be removed from storage.'),
+            'Move "${widget.character.name}" to the recycle bin? '
+            'It will be permanently deleted after 7 days.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(context),
@@ -124,7 +124,7 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                 Navigator.pop(context);
               }
             },
-            child: const Text('Delete'),
+            child: const Text('Move to Bin'),
           ),
         ],
       ),

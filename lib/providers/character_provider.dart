@@ -70,6 +70,7 @@ enum SortOption {
   oldestFirst,
   lastApplied,
   tierHighest,
+  lastModified,
 }
 
 extension SortOptionLabel on SortOption {
@@ -79,8 +80,9 @@ extension SortOptionLabel on SortOption {
       case SortOption.nameZA:      return 'Name Z → A';
       case SortOption.newestFirst: return 'Newest first';
       case SortOption.oldestFirst: return 'Oldest first';
-      case SortOption.lastApplied: return 'Last applied';
-      case SortOption.tierHighest: return 'Tier (S first)';
+      case SortOption.lastApplied:  return 'Last applied';
+      case SortOption.tierHighest:  return 'Tier (S first)';
+      case SortOption.lastModified: return 'Last modified';
     }
   }
 
@@ -90,8 +92,9 @@ extension SortOptionLabel on SortOption {
       case SortOption.nameZA:      return Icons.sort_by_alpha_rounded;
       case SortOption.newestFirst: return Icons.schedule_rounded;
       case SortOption.oldestFirst: return Icons.history_rounded;
-      case SortOption.lastApplied: return Icons.check_circle_outline_rounded;
-      case SortOption.tierHighest: return Icons.military_tech_rounded;
+      case SortOption.lastApplied:  return Icons.check_circle_outline_rounded;
+      case SortOption.tierHighest:  return Icons.military_tech_rounded;
+      case SortOption.lastModified: return Icons.edit_calendar_rounded;
     }
   }
 }
@@ -105,6 +108,7 @@ class CharacterProvider extends ChangeNotifier {
   List<CharacterData>   _characters   = [];
   List<CollectionData>  _collections  = [];
   List<TagData>         _tags         = [];
+  List<({CharacterData character, DateTime deletedAt})> _trashItems = [];
 
   // characterId → gallery items (in-memory cache)
   final Map<String, List<GalleryItemData>> _galleryCache = {};
@@ -161,6 +165,9 @@ class CharacterProvider extends ChangeNotifier {
   bool         get matchAll             => _matchAll;
   String?      get gameFolderPath       => _gameFolderPath;
   String?      get saveLocation         => _saveLocation;
+
+  List<({CharacterData character, DateTime deletedAt})> get trashItems => _trashItems;
+  int get trashCount => _trashItems.length;
 
   Map<String, DateTime> getVariantUpdateTimes(String characterId) =>
       _pendingUpdates[characterId] ?? {};
@@ -256,6 +263,8 @@ class CharacterProvider extends ChangeNotifier {
           final bt = b.tierIndex ?? 999;
           if (at != bt) return at.compareTo(bt);
           return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        case SortOption.lastModified:
+          return b.lastModifiedAt.compareTo(a.lastModifiedAt);
       }
     }
 
@@ -294,9 +303,11 @@ class CharacterProvider extends ChangeNotifier {
       _sortOption = SortOption.values.byName(settings.sortOption!);
     }
 
+    await _data.purgeExpiredTrash();
     _characters  = await _data.getAllCharacters();
     _collections = await _data.getAllCollections();
     _tags        = await _data.getAllTags();
+    _trashItems  = await _data.listTrash();
 
     // Pre-load gallery cache
     for (final c in _characters) {
@@ -506,10 +517,26 @@ class CharacterProvider extends ChangeNotifier {
     if (character.isApplied && _gameFolderPath != null) {
       await _removeFromGameFolder(character);
     }
-    await _data.deleteCharacter(character);
+    await _data.softDeleteCharacter(character);
     _pendingUpdates.remove(character.id);
     _galleryCache.remove(character.id);
     _characters.removeWhere((c) => c.id == character.id);
+    _trashItems = await _data.listTrash();
+    notifyListeners();
+  }
+
+  Future<void> restoreCharacter(String id) async {
+    final char = await _data.restoreCharacter(id);
+    if (char != null) {
+      _characters.add(char);
+      _trashItems = await _data.listTrash();
+      notifyListeners();
+    }
+  }
+
+  Future<void> permanentlyDeleteFromTrash(String id) async {
+    await _data.permanentlyDeleteFromTrash(id);
+    _trashItems = await _data.listTrash();
     notifyListeners();
   }
 
@@ -1193,6 +1220,8 @@ class CharacterProvider extends ChangeNotifier {
           final bt = b.tierIndex ?? 999;
           if (at != bt) return at.compareTo(bt);
           return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+        case SortOption.lastModified:
+          return b.lastModifiedAt.compareTo(a.lastModifiedAt);
       }
     });
     return sorted;

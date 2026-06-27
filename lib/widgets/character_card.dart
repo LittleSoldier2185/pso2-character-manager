@@ -215,7 +215,7 @@ class CharacterCard extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 4),
-                          _ApplyToggleButton(character: character),
+                          ApplyToggleButton(character: character),
                         ],
                       ),
                       // Tags — L and XL only
@@ -406,15 +406,15 @@ class _RainbowBadgeState extends State<_RainbowBadge>
 
 // ── Apply toggle button ────────────────────────────────────────────
 
-class _ApplyToggleButton extends StatefulWidget {
+class ApplyToggleButton extends StatefulWidget {
   final CharacterData character;
-  const _ApplyToggleButton({required this.character});
+  const ApplyToggleButton({required this.character});
 
   @override
-  State<_ApplyToggleButton> createState() => _ApplyToggleButtonState();
+  State<ApplyToggleButton> createState() => ApplyToggleButtonState();
 }
 
-class _ApplyToggleButtonState extends State<_ApplyToggleButton> {
+class ApplyToggleButtonState extends State<ApplyToggleButton> {
   bool _loading = false;
 
   Future<void> _toggle() async {

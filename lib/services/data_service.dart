@@ -133,6 +133,8 @@ class DataService {
   String get _charactersPath => p.join(_dataRootPath, 'characters');
   String get _collectionsPath => p.join(_dataRootPath, 'collections.json');
   String get _tagsPath => p.join(_dataRootPath, 'tags.json');
+  String get _recycleBinPath => p.join(_dataRootPath, 'recycle_bin');
+  String get _recycleBinMetaPath => p.join(_recycleBinPath, 'meta.json');
 
   String characterFolderPath(String folderName) =>
       p.join(_charactersPath, folderName);
@@ -316,6 +318,7 @@ class DataService {
 
   /// Writes character_data.json for the given character.
   Future<void> saveCharacter(CharacterData character) async {
+    character.lastModifiedAt = DateTime.now();
     final jsonFile =
         File(p.join(character.folderPath, 'character_data.json'));
     await jsonFile.writeAsString(
@@ -391,6 +394,133 @@ class DataService {
     await saveCharacter(character);
     return variant;
   }
+
+  // ── Recycle bin ───────────────────────────────────────────────────
+
+  Future<Map<String, int>> _readTrashMeta() async {
+    final file = File(_recycleBinMetaPath);
+    if (!await file.exists()) return {};
+    try {
+      final j = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      return j.map((k, v) => MapEntry(k, v as int));
+    } catch (_) {
+      return {};
+    }
+  }
+
+  Future<void> _writeTrashMeta(Map<String, int> meta) async {
+    await Directory(_recycleBinPath).create(recursive: true);
+    await File(_recycleBinMetaPath).writeAsString(jsonEncode(meta));
+  }
+
+  Future<void> softDeleteCharacter(CharacterData character) async {
+    await Directory(_recycleBinPath).create(recursive: true);
+    final dest = p.join(_recycleBinPath, p.basename(character.folderPath));
+    await Directory(character.folderPath).rename(dest);
+    final meta = await _readTrashMeta();
+    meta[character.id] = DateTime.now().millisecondsSinceEpoch;
+    await _writeTrashMeta(meta);
+  }
+
+  Future<CharacterData?> restoreCharacter(String id) async {
+    final meta = await _readTrashMeta();
+    if (!meta.containsKey(id)) return null;
+    final dir = Directory(_recycleBinPath);
+    if (!await dir.exists()) return null;
+    await for (final entry in dir.list()) {
+      if (entry is! Directory) continue;
+      final jsonFile = File(p.join(entry.path, 'character_data.json'));
+      if (!await jsonFile.exists()) continue;
+      try {
+        final j = jsonDecode(await jsonFile.readAsString()) as Map<String, dynamic>;
+        if (j['id'] as String == id) {
+          var dest = p.join(_charactersPath, p.basename(entry.path));
+          if (await Directory(dest).exists()) {
+            dest = '${dest}_r${DateTime.now().millisecondsSinceEpoch}';
+          }
+          await Directory(entry.path).rename(dest);
+          meta.remove(id);
+          await _writeTrashMeta(meta);
+          return CharacterData.fromJson(j, dest);
+        }
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  Future<void> purgeExpiredTrash() async {
+    final meta = await _readTrashMeta();
+    if (meta.isEmpty) return;
+    final now = DateTime.now();
+    final toDelete = meta.entries
+        .where((e) => now.difference(DateTime.fromMillisecondsSinceEpoch(e.value)).inDays >= 7)
+        .map((e) => e.key)
+        .toList();
+    if (toDelete.isEmpty) return;
+    final dir = Directory(_recycleBinPath);
+    if (!await dir.exists()) return;
+    for (final id in toDelete) {
+      await for (final entry in dir.list()) {
+        if (entry is! Directory) continue;
+        final jsonFile = File(p.join(entry.path, 'character_data.json'));
+        if (!await jsonFile.exists()) continue;
+        try {
+          final j = jsonDecode(await jsonFile.readAsString()) as Map<String, dynamic>;
+          if (j['id'] as String == id) {
+            await Directory(entry.path).delete(recursive: true);
+            break;
+          }
+        } catch (_) {}
+      }
+      meta.remove(id);
+    }
+    await _writeTrashMeta(meta);
+  }
+
+  Future<List<({CharacterData character, DateTime deletedAt})>> listTrash() async {
+    final meta = await _readTrashMeta();
+    final result = <({CharacterData character, DateTime deletedAt})>[];
+    final dir = Directory(_recycleBinPath);
+    if (!await dir.exists()) return result;
+    await for (final entry in dir.list()) {
+      if (entry is! Directory) continue;
+      final jsonFile = File(p.join(entry.path, 'character_data.json'));
+      if (!await jsonFile.exists()) continue;
+      try {
+        final j = jsonDecode(await jsonFile.readAsString()) as Map<String, dynamic>;
+        final id = j['id'] as String;
+        if (!meta.containsKey(id)) continue;
+        result.add((
+          character: CharacterData.fromJson(j, entry.path),
+          deletedAt: DateTime.fromMillisecondsSinceEpoch(meta[id]!),
+        ));
+      } catch (_) {}
+    }
+    result.sort((a, b) => b.deletedAt.compareTo(a.deletedAt));
+    return result;
+  }
+
+  Future<void> permanentlyDeleteFromTrash(String id) async {
+    final dir = Directory(_recycleBinPath);
+    if (!await dir.exists()) return;
+    await for (final entry in dir.list()) {
+      if (entry is! Directory) continue;
+      final jsonFile = File(p.join(entry.path, 'character_data.json'));
+      if (!await jsonFile.exists()) continue;
+      try {
+        final j = jsonDecode(await jsonFile.readAsString()) as Map<String, dynamic>;
+        if (j['id'] as String == id) {
+          await Directory(entry.path).delete(recursive: true);
+          break;
+        }
+      } catch (_) {}
+    }
+    final meta = await _readTrashMeta();
+    meta.remove(id);
+    await _writeTrashMeta(meta);
+  }
+
+  // ── Hard delete (bypass bin) ──────────────────────────────────────
 
   /// Deletes the entire character folder.
   Future<void> deleteCharacter(CharacterData character) async {

@@ -18,6 +18,7 @@ import 'screens/import_bundle_dialog.dart';
 import 'screens/migration_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/tags_screen.dart';
+import 'screens/recycle_bin_screen.dart';
 import 'screens/update_check_dialog.dart';
 import 'patch_notes.dart';
 import 'services/app_update_service.dart';
@@ -251,6 +252,7 @@ class _MainShellState extends State<MainShell> {
                           GalleryScreen(),
                           TagsScreen(),
                           ScanScreen(),
+                          RecycleBinScreen(),
                         ],
                       ),
                     ),
@@ -488,6 +490,14 @@ class _SidebarState extends State<_Sidebar> {
                     label: 'Scan folder',
                     selected: widget.currentIndex == 5,
                     onTap: () => widget.onSelect(5),
+                    collapsed: narrow,
+                  ),
+                  _NavItem(
+                    icon: Icons.delete_outline_rounded,
+                    label: 'Recycle Bin',
+                    badge: provider.trashCount > 0 ? '${provider.trashCount}' : null,
+                    selected: widget.currentIndex == 6,
+                    onTap: () => widget.onSelect(6),
                     collapsed: narrow,
                   ),
                   _UpdatesNavItem(

@@ -142,7 +142,8 @@ class AppUpdater {
         ':wait\r\n'
         'tasklist /FI "IMAGENAME eq $procName" 2>NUL | find /I "$procName" >NUL\r\n'
         'if not ERRORLEVEL 1 (timeout /nobreak /t 1 >NUL & goto wait)\r\n'
-        'robocopy "$sourceDir" "$installDir" /E /IS /IT /NFL /NDL /NJH /NJS /NC /NS /NP\r\n'
+        'timeout /nobreak /t 3 >NUL\r\n'  // let Windows release DLL handles before copying
+        'robocopy "$sourceDir" "$installDir" /E /IS /IT /R:5 /W:2 /NFL /NDL /NJH /NJS /NC /NS /NP\r\n'
         'start "" "$exePath"\r\n'
         '(goto) 2>NUL & del "%~f0"\r\n',
       );

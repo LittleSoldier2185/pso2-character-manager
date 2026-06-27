@@ -116,6 +116,8 @@ class CharacterData {
   // Absolute path to the character's root folder — not serialized
   final String folderPath;
 
+  DateTime lastModifiedAt;
+
   CharacterData({
     required this.id,
     required this.name,
@@ -128,6 +130,7 @@ class CharacterData {
     this.isFavourite = false,
     this.tierIndex,
     DateTime? createdAt,
+    DateTime? lastModifiedAt,
     this.thumbnailMode = thumbnailModeFollow,
     this.staticThumbnailFileName,
     required this.mainVariant,
@@ -140,7 +143,8 @@ class CharacterData {
         collectionIds = collectionIds ?? [],
         appliedVariants = appliedVariants ?? [],
         variants = variants ?? [],
-        createdAt = createdAt ?? DateTime.now();
+        createdAt = createdAt ?? DateTime.now(),
+        lastModifiedAt = lastModifiedAt ?? createdAt ?? DateTime.now();
 
   // ── Tier ────────────────────────────────────────────────────────
 
@@ -284,6 +288,7 @@ class CharacterData {
     'isFavourite': isFavourite,
     'tierIndex': tierIndex,
     'createdAt': createdAt.toIso8601String(),
+    'lastModifiedAt': lastModifiedAt.toIso8601String(),
     'thumbnailMode': thumbnailMode,
     'staticThumbnailFileName': staticThumbnailFileName,
     'mainVariant': mainVariant,
@@ -307,6 +312,9 @@ class CharacterData {
         isFavourite: (j['isFavourite'] as bool?) ?? false,
         tierIndex: j['tierIndex'] as int?,
         createdAt: DateTime.parse(j['createdAt'] as String),
+        lastModifiedAt: j['lastModifiedAt'] != null
+            ? DateTime.parse(j['lastModifiedAt'] as String)
+            : DateTime.parse(j['createdAt'] as String),
         thumbnailMode:
             (j['thumbnailMode'] as String?) ?? thumbnailModeFollow,
         staticThumbnailFileName: j['staticThumbnailFileName'] as String?,

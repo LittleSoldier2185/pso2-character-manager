@@ -12,6 +12,47 @@ class _PatchEntry {
 }
 
 const _entries = [
+  _PatchEntry('1.5.0', 'Recycle bin, compact list view & last modified', '''
+NEW FEATURES
+
+• Recycle bin — deleting a character now moves it to a recycle bin instead
+  of permanently removing it. Items are automatically purged after 7 days.
+  A new "Recycle Bin" entry in the sidebar shows a badge with the item count.
+  From the recycle bin screen you can restore any character back to your
+  library or permanently delete it early. An "Empty bin" button clears
+  everything at once. Items expiring within 24 hours are highlighted in red.
+
+• Compact list view — a new "List view" option in the card size picker
+  (below the existing Small / Medium / Large / Extra large grid modes)
+  switches the home screen to a dense single-column list. Each row shows
+  a small thumbnail, tier badge, name, race/gender, and last modified date.
+
+• Last modified date — every character now tracks when it was last edited.
+  The date appears in list view as a relative label (Today, Yesterday, 3d ago…).
+  A new "Last modified" sort option is available in the sort menu across
+  all screens that support sorting.
+
+• Random spinner — the dialog is now responsive and shrinks to fit smaller
+  windows instead of overflowing at its previous fixed 600px width.
+
+• Random spinner filters now persist — whitelist, blacklist, and the
+  "Include variants" toggle are remembered when you close and reopen the
+  spinner within the same session. Filters reset when the app is closed.
+
+BUG FIXES
+
+• Random spinner — whitelisting a specific variant now correctly restricts
+  the spin pool to only that variant. Previously, all main variants from
+  other characters were still included alongside the whitelisted entry.
+  The "Include variants" toggle is now correctly ignored when exact variants
+  are whitelisted.
+
+• Auto-updater — the installer now waits 3 seconds after the app closes
+  before copying files. This prevents the occasional "file in use" error
+  on desktop_drop_plugin.dll and similar DLLs that Windows holds briefly
+  after a process exits. Robocopy retry limits are also tightened so that
+  if a lock does occur, the wait is 2 seconds instead of 30.
+'''),
   _PatchEntry('1.4.4', 'QoL improvements', '''
 IMPROVEMENTS
 

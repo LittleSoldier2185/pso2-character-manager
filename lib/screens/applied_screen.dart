@@ -58,6 +58,8 @@ class _AppliedScreenState extends State<AppliedScreen> {
           if (at != bt) return at.compareTo(bt);
           return a.name.toLowerCase().compareTo(b.name.toLowerCase());
         });
+      case SortOption.lastModified:
+        out.sort((a, b) => b.lastModifiedAt.compareTo(a.lastModifiedAt));
     }
     return out;
   }

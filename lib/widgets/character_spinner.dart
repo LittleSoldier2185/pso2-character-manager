@@ -112,9 +112,14 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
   bool _done      = false;
   bool _dismissed = false;
 
-  // Filter state
-  final Set<_FilterEntry> _whitelist = {};
-  final Set<_FilterEntry> _blacklist = {};
+  // Filter state — statics persist for the session, reset on program exit
+  static final Set<_FilterEntry> _savedWhitelist     = {};
+  static final Set<_FilterEntry> _savedBlacklist     = {};
+  static bool                    _savedIncludeVariants = false;
+  static bool                    _savedShowFilters     = false;
+
+  late Set<_FilterEntry> _whitelist;
+  late Set<_FilterEntry> _blacklist;
   bool _showFilters     = false;
   bool _includeVariants = false;
 
@@ -124,6 +129,10 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
   @override
   void initState() {
     super.initState();
+    _whitelist     = Set.of(_savedWhitelist);
+    _blacklist     = Set.of(_savedBlacklist);
+    _includeVariants = _savedIncludeVariants;
+    _showFilters   = _savedShowFilters;
     _scrollCtrl = ScrollController();
     _ctrl = AnimationController(vsync: this, duration: _spinDuration);
     _buildReel();
@@ -132,6 +141,14 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
 
   @override
   void dispose() {
+    _savedWhitelist
+      ..clear()
+      ..addAll(_whitelist);
+    _savedBlacklist
+      ..clear()
+      ..addAll(_blacklist);
+    _savedIncludeVariants = _includeVariants;
+    _savedShowFilters     = _showFilters;
     _idleTicker?.dispose();
     _ctrl.dispose();
     _scrollCtrl.dispose();
@@ -164,6 +181,22 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
         _whitelist.where((e) => e.kind == _FilterKind.variant).toSet();
     final nonVariantWhitelist =
         _whitelist.where((e) => e.kind != _FilterKind.variant).toSet();
+
+    // Exact-variant whitelist: only those specific entries, no candidates mixed in
+    if (variantWhitelist.isNotEmpty && nonVariantWhitelist.isEmpty) {
+      final seen   = <String>{};
+      final result = <_SpinEntry>[];
+      for (final char in widget.characters) {
+        for (final variant in char.variants) {
+          final entry = _SpinEntry(char, variant);
+          if (variantWhitelist.any((e) => _matchesEntry(entry, e)) &&
+              !_blacklist.any((e) => _matchesEntry(entry, e))) {
+            if (seen.add(entry.key)) result.add(entry);
+          }
+        }
+      }
+      return result;
+    }
 
     final forced     = <_SpinEntry>[];
     final candidates = <_SpinEntry>[];
@@ -358,8 +391,8 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
       backgroundColor: AppTheme.bgCard,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
-      child: SizedBox(
-        width: 600,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 600),
         child: LayoutBuilder(
           builder: (context, constraints) {
             final maxHeight = MediaQuery.of(context).size.height - 48;
