@@ -237,6 +237,88 @@ INFRASTRUCTURE
 • Storage migrated from Hive binary database to human-readable JSON files.
   Migration runs automatically on first launch — no data is lost.
 '''),
+  _PatchEntry('1.2.0', 'Tier system, character bundles & search rework', '''
+BUG FIXES
+
+• Sync detection — update checks now run against all registered characters,
+  not just applied ones.
+• Sync timer — manual sync check now correctly resets the 30-second auto
+  interval to avoid duplicate checks.
+• Random spinner — clicking Reroll now rebuilds and spins in one tap
+  instead of requiring two.
+
+NEW FEATURES
+
+• Tier rating — rate characters S / A / B / C / D. Tier badge on card
+  thumbnail, coloured border per tier, sort by tier, and tier filter in
+  the filter panel. Random spinner supports tier whitelisting/blacklisting.
+
+• Character bundles — export and import characters as .pso2char bundles
+  (zip with character file, thumbnail, gallery, and metadata). Import
+  preview shows contents before committing. Drag and drop .pso2char files
+  anywhere in the app.
+
+• Collection detail redesign — left panel with thumbnail, character count,
+  and info. Character grid with size picker, sort, and searchable multi-
+  select add dialog.
+
+• Card size picker — Extra large / Large / Medium / Small for both the
+  library grid and gallery screen. Cards scale displayed info with size.
+
+IMPROVEMENTS
+
+• Search — live filtering by name. Tag filter moved to the filter panel
+  with whitelist/blacklist per tag and AND/OR toggle.
+• Filter presets — save, name, colour-code, and one-tap restore any
+  combination of active filters. Optional persist on close.
+• Collections grid — sort button added (name, most characters, newest).
+'''),
+  _PatchEntry('1.1.0', 'Tag manager, gallery blur & collection colours', '''
+BUG FIXES
+
+• Tag search — search bar tokens now correctly find characters by tag name.
+• Favourites sort — primary sort (name, date, etc.) is now fully respected
+  within both the favourites and non-favourites groups.
+• Scan import crash — imported files are copied into app storage before
+  saving, preventing a crash when applying scanned characters.
+
+IMPROVEMENTS
+
+• Tag manager — live search bar, sort menu (name, usage, date), and
+  timestamp for time-based sorting.
+
+• Gallery blur — hover any image in character or global gallery and click
+  the eye icon to blur or unblur sensitive images. Blur persists across
+  sessions and syncs between both galleries.
+
+• Collection colours — cards now tint with the collection accent colour.
+  Full HSV colour wheel added — no longer limited to 6 presets.
+'''),
+  _PatchEntry('1.0.0', 'First stable release', '''
+NEW FEATURES
+
+• Character library — grid view of all your characters with thumbnail,
+  name, race, gender, description, and tags. Sort by name, date, or last
+  applied. Filter by race, gender, applied status, and collection.
+
+• Apply to game — copy up to 50 character files to your PSO2 game folder
+  with one click. Slot tracking (1–50) with a progress bar on the applied
+  screen.
+
+• Collections — organise characters into named groups. One character can
+  belong to multiple collections. 2×2 preview thumbnail or custom image.
+
+• Tags — create custom tags and assign them to characters for easy
+  filtering.
+
+• Import — drag and drop character files and thumbnails from Windows
+  Explorer, or scan your PSO2 game folder for unregistered files.
+
+• Export — export any character file to any folder.
+
+• Settings — set a custom save location, configure your PSO2 game folder,
+  and choose from 6 accent colours.
+'''),
 ];
 
 // ── Body parser ───────────────────────────────────────────────────
