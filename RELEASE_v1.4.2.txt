@@ -1,8 +1,0 @@
-PSO2 Character Manager v1.4.2
-Manual download option
-
-IMPROVEMENT
-
-• Manual download — when a new version is available, you can now choose
-  between updating automatically or opening the GitHub release page to
-  download and install manually.
