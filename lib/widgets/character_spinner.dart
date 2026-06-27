@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:provider/provider.dart';
@@ -1090,6 +1091,9 @@ class _ReelCard extends StatelessWidget {
             : tier != null ? Color(tier.colorValue) : AppTheme.accent)
         : raceColor.withOpacity(0.35);
 
+    final isBlurred = entry.variant.thumbnailBlurred ||
+        (entry.isMainVariant && c.thumbnailBlurred);
+
     final card = Container(
       width: _cardWidth,
       height: _cardHeight,
@@ -1107,12 +1111,21 @@ class _ReelCard extends StatelessWidget {
           children: [
             Expanded(
               child: thumb != null
-                  ? Image.file(
-                      File(thumb),
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      errorBuilder: (_, __, ___) => _placeholder(raceColor),
-                    )
+                  ? () {
+                      Widget img = Image.file(
+                        File(thumb),
+                        fit: BoxFit.cover,
+                        width: double.infinity,
+                        errorBuilder: (_, __, ___) => _placeholder(raceColor),
+                      );
+                      if (isBlurred) {
+                        img = ImageFiltered(
+                          imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                          child: img,
+                        );
+                      }
+                      return img;
+                    }()
                   : _placeholder(raceColor),
             ),
             Container(

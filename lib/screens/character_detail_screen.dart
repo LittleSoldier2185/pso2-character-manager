@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:path/path.dart' as p;
 import 'package:pasteboard/pasteboard.dart';
 import 'package:provider/provider.dart';
 import '../models/character_data.dart';
@@ -336,10 +337,17 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                             children: [
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(11),
-                                child: Image.file(File(thumbPath!),
-                                    fit: BoxFit.cover),
+                                child: c.thumbnailBlurred || (c.mainVariantData?.thumbnailBlurred ?? false)
+                                    ? ImageFiltered(
+                                        imageFilter: ImageFilter.blur(
+                                            sigmaX: 18, sigmaY: 18),
+                                        child: Image.file(File(thumbPath!),
+                                            fit: BoxFit.cover),
+                                      )
+                                    : Image.file(File(thumbPath!),
+                                        fit: BoxFit.cover),
                               ),
-                              if (!_isEditing)
+                              if (!_isEditing) ...[
                                 Positioned(
                                   bottom: 8,
                                   right: 8,
@@ -355,6 +363,30 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                                         color: Colors.white),
                                   ),
                                 ),
+                                Positioned(
+                                  top: 8,
+                                  right: 8,
+                                  child: GestureDetector(
+                                    onTap: () => context
+                                        .read<CharacterProvider>()
+                                        .toggleThumbnailBlur(c),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(5),
+                                      decoration: BoxDecoration(
+                                        color: Colors.black.withOpacity(0.55),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: Icon(
+                                        c.thumbnailBlurred || (c.mainVariantData?.thumbnailBlurred ?? false)
+                                            ? Icons.visibility_rounded
+                                            : Icons.visibility_off_outlined,
+                                        size: 14,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ],
                           )
                         : Center(
@@ -492,11 +524,9 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                   _buildTagSection(context),
                   const SizedBox(height: 18),
 
-                  _fieldLabel('Character file'),
+                  _fieldLabel('Main File'),
                   const SizedBox(height: 4),
-                  Text(c.characterFilePath?.split(r'\').last ?? '',
-                      style: TextStyle(
-                          color: AppTheme.textSecondary, fontSize: 12)),
+                  _FileNameRow(character: c),
                   const SizedBox(height: 2),
                   Text('Added ${_formatDate(c.createdAt)}',
                       style: TextStyle(
@@ -780,6 +810,137 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
 
   String _formatDate(DateTime dt) =>
       '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+}
+
+// ── File rename row ──────────────────────────────────────
+
+class _FileNameRow extends StatelessWidget {
+  final CharacterData character;
+  const _FileNameRow({required this.character});
+
+  void _showRenameDialog(BuildContext context) {
+    final filePath = character.characterFilePath;
+    final currentName = filePath != null ? p.basename(filePath) : '';
+    final currentStem = p.basenameWithoutExtension(currentName);
+    final currentExt = p.extension(currentName).replaceFirst('.', '').toLowerCase();
+
+    final stemCtrl = TextEditingController(text: currentStem);
+    String selectedExt = CharacterData.validExtensions.contains(currentExt)
+        ? currentExt
+        : CharacterData.validExtensions.first;
+
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          backgroundColor: AppTheme.bgCard,
+          title: const Text('Rename character file'),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('File name',
+                    style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500)),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: stemCtrl,
+                        autofocus: true,
+                        onChanged: (_) => setSt(() {}),
+                        decoration:
+                            const InputDecoration(hintText: 'File name (no extension)'),
+                        style: TextStyle(
+                            color: AppTheme.textPrimary, fontSize: 13),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgSurface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: DropdownButton<String>(
+                        value: selectedExt,
+                        underline: const SizedBox.shrink(),
+                        dropdownColor: AppTheme.bgCard,
+                        style: TextStyle(
+                            color: AppTheme.textPrimary, fontSize: 13),
+                        items: CharacterData.validExtensions
+                            .map((ext) => DropdownMenuItem(
+                                  value: ext,
+                                  child: Text('.$ext'),
+                                ))
+                            .toList(),
+                        onChanged: (v) => setSt(() => selectedExt = v!),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Preview: ${stemCtrl.text.trim().isEmpty ? currentStem : stemCtrl.text.trim()}.$selectedExt',
+                  style: TextStyle(
+                      color: AppTheme.accent.withOpacity(0.8), fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final stem = stemCtrl.text.trim();
+                if (stem.isEmpty) return;
+                Navigator.pop(ctx);
+                final variant = character.mainVariantData;
+                if (variant == null) return;
+                final error = await context
+                    .read<CharacterProvider>()
+                    .renameVariantFile(character, variant, stem, selectedExt);
+                if (error != null && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(error),
+                    backgroundColor: Colors.red,
+                  ));
+                }
+              },
+              child: const Text('Rename'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fileName = character.characterFilePath?.split(r'\').last ?? '';
+    return GestureDetector(
+      onTap: () => _showRenameDialog(context),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(fileName.isEmpty ? 'No file' : fileName,
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+          const SizedBox(width: 6),
+          Icon(Icons.edit_outlined,
+              size: 13, color: AppTheme.textSecondary.withOpacity(0.6)),
+        ],
+      ),
+    );
+  }
 }
 
 // ── Tier picker widget ───────────────────────────────────
@@ -1760,20 +1921,47 @@ class _VariantsSectionState extends State<_VariantsSection> {
             ),
             children: [
               for (int i = 0; i < variants.length; i++)
-                ReorderableDelayedDragStartListener(
+                GestureDetector(
                   key: ValueKey(variants[i].folderName),
-                  index: i,
-                  child: Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: _VariantCard(
-                      variant: variants[i],
-                      character: widget.character,
-                      cardWidth: _cardWidth,
-                      isMain: variants[i].folderName ==
-                          widget.character.mainVariant,
-                      isApplied: widget.character
-                          .isVariantApplied(variants[i].folderName),
-                      hasGameFolder: hasGameFolder,
+                  onTap: () async {
+                    final v = variants[i];
+                    final prov = context.read<CharacterProvider>();
+                    final alreadyApplied =
+                        widget.character.isVariantApplied(v.folderName);
+                    if (alreadyApplied) {
+                      await prov.unapplyVariant(widget.character, v.folderName);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text('Unapplied: ${v.displayName}'),
+                          duration: const Duration(seconds: 2),
+                        ));
+                      }
+                    } else {
+                      final error = await prov.applyVariant(
+                          widget.character, v.folderName);
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(error ?? 'Applied: ${v.displayName}'),
+                          backgroundColor: error != null ? Colors.red : null,
+                          duration: const Duration(seconds: 2),
+                        ));
+                      }
+                    }
+                  },
+                  child: ReorderableDelayedDragStartListener(
+                    index: i,
+                    child: Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: _VariantCard(
+                        variant: variants[i],
+                        character: widget.character,
+                        cardWidth: _cardWidth,
+                        isMain: variants[i].folderName ==
+                            widget.character.mainVariant,
+                        isApplied: widget.character
+                            .isVariantApplied(variants[i].folderName),
+                        hasGameFolder: hasGameFolder,
+                      ),
                     ),
                   ),
                 ),
@@ -1838,6 +2026,110 @@ class _VariantCard extends StatelessWidget {
         context.read<CharacterProvider>().renameVariant(character, variant, name);
       }
     });
+  }
+
+  void _showFileRenameDialog(BuildContext context) {
+    final filePath = character.charFileForVariant(variant.folderName);
+    final currentName = filePath != null ? p.basename(filePath) : '';
+    final currentStem = p.basenameWithoutExtension(currentName);
+    final currentExt = p.extension(currentName).replaceFirst('.', '').toLowerCase();
+
+    final stemCtrl = TextEditingController(text: currentStem);
+    String selectedExt = CharacterData.validExtensions.contains(currentExt)
+        ? currentExt
+        : CharacterData.validExtensions.first;
+
+    showDialog(
+      context: context,
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSt) => AlertDialog(
+          backgroundColor: AppTheme.bgCard,
+          title: Text('Rename file — ${variant.displayName}'),
+          content: SizedBox(
+            width: 360,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('File name',
+                    style: TextStyle(
+                        color: AppTheme.textSecondary,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500)),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: stemCtrl,
+                        autofocus: true,
+                        onChanged: (_) => setSt(() {}),
+                        decoration: const InputDecoration(
+                            hintText: 'File name (no extension)'),
+                        style: TextStyle(
+                            color: AppTheme.textPrimary, fontSize: 13),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.bgSurface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppTheme.borderColor),
+                      ),
+                      child: DropdownButton<String>(
+                        value: selectedExt,
+                        underline: const SizedBox.shrink(),
+                        dropdownColor: AppTheme.bgCard,
+                        style: TextStyle(
+                            color: AppTheme.textPrimary, fontSize: 13),
+                        items: CharacterData.validExtensions
+                            .map((ext) => DropdownMenuItem(
+                                  value: ext,
+                                  child: Text('.$ext'),
+                                ))
+                            .toList(),
+                        onChanged: (v) => setSt(() => selectedExt = v!),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Preview: ${stemCtrl.text.trim().isEmpty ? currentStem : stemCtrl.text.trim()}.$selectedExt',
+                  style: TextStyle(
+                      color: AppTheme.accent.withOpacity(0.8), fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final stem = stemCtrl.text.trim();
+                if (stem.isEmpty) return;
+                Navigator.pop(ctx);
+                final error = await context
+                    .read<CharacterProvider>()
+                    .renameVariantFile(character, variant, stem, selectedExt);
+                if (error != null && context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(error),
+                    backgroundColor: Colors.red,
+                  ));
+                }
+              },
+              child: const Text('Rename'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _apply(BuildContext context) async {
@@ -1933,52 +2225,70 @@ class _VariantCard extends StatelessWidget {
   String _formatSyncDate(DateTime dt) =>
       '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
 
-  @override
-  Widget build(BuildContext context) {
-    final thumbPath = character.thumbnailForVariant(variant.folderName);
-    final thumbFile = thumbPath != null ? File(thumbPath) : null;
-    final hasThumb = thumbFile != null && thumbFile.existsSync();
-    final thumbHeight = (cardWidth * 0.85).roundToDouble();
-    final showDetails = cardWidth >= 100.0;
+  Future<void> _handleAction(BuildContext context, _VariantAction action) async {
+    switch (action) {
+      case _VariantAction.rename:
+        _showRenameDialog(context);
+      case _VariantAction.renameFile:
+        _showFileRenameDialog(context);
+      case _VariantAction.changeThumbnail:
+        await _changeThumbnail(context);
+      case _VariantAction.toggleBlur:
+        await context
+            .read<CharacterProvider>()
+            .toggleVariantThumbnailBlur(character, variant);
+      case _VariantAction.duplicate:
+        await context
+            .read<CharacterProvider>()
+            .duplicateVariant(character, variant);
+      case _VariantAction.setMain:
+        await context
+            .read<CharacterProvider>()
+            .setMainVariant(character, variant.folderName);
+      case _VariantAction.apply:
+        await _apply(context);
+      case _VariantAction.unapply:
+        await _unapply(context);
+      case _VariantAction.exportBundle:
+        await _exportBundle(context);
+      case _VariantAction.delete:
+        _confirmDelete(context);
+    }
+  }
 
-    return PopupMenuButton<_VariantAction>(
+  void _showContextMenu(BuildContext context, Offset globalPos) async {
+    final size = MediaQuery.of(context).size;
+    final action = await showMenu<_VariantAction>(
+      context: context,
       color: AppTheme.bgCard,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(8),
         side: BorderSide(color: AppTheme.borderColor),
       ),
-      onSelected: (action) async {
-        switch (action) {
-          case _VariantAction.rename:
-            _showRenameDialog(context);
-          case _VariantAction.changeThumbnail:
-            await _changeThumbnail(context);
-          case _VariantAction.duplicate:
-            await context
-                .read<CharacterProvider>()
-                .duplicateVariant(character, variant);
-          case _VariantAction.setMain:
-            await context
-                .read<CharacterProvider>()
-                .setMainVariant(character, variant.folderName);
-          case _VariantAction.apply:
-            await _apply(context);
-          case _VariantAction.unapply:
-            await _unapply(context);
-          case _VariantAction.exportBundle:
-            await _exportBundle(context);
-          case _VariantAction.delete:
-            _confirmDelete(context);
-        }
-      },
-      itemBuilder: (_) => [
+      position: RelativeRect.fromLTRB(
+          globalPos.dx, globalPos.dy,
+          size.width - globalPos.dx, size.height - globalPos.dy),
+      items: [
         const PopupMenuItem(
           value: _VariantAction.rename,
           child: _MenuRow(Icons.edit_outlined, 'Rename'),
         ),
         const PopupMenuItem(
+          value: _VariantAction.renameFile,
+          child: _MenuRow(Icons.drive_file_rename_outline_rounded, 'Rename file'),
+        ),
+        const PopupMenuItem(
           value: _VariantAction.changeThumbnail,
           child: _MenuRow(Icons.image_outlined, 'Change thumbnail'),
+        ),
+        PopupMenuItem(
+          value: _VariantAction.toggleBlur,
+          child: _MenuRow(
+            variant.thumbnailBlurred
+                ? Icons.visibility_rounded
+                : Icons.visibility_off_outlined,
+            variant.thumbnailBlurred ? 'Unblur thumbnail' : 'Blur thumbnail',
+          ),
         ),
         const PopupMenuItem(
           value: _VariantAction.duplicate,
@@ -2011,6 +2321,20 @@ class _VariantCard extends StatelessWidget {
               color: Colors.redAccent),
         ),
       ],
+    );
+    if (action != null && context.mounted) await _handleAction(context, action);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final thumbPath = character.thumbnailForVariant(variant.folderName);
+    final thumbFile = thumbPath != null ? File(thumbPath) : null;
+    final hasThumb = thumbFile != null && thumbFile.existsSync();
+    final thumbHeight = (cardWidth * 0.85).roundToDouble();
+    final showDetails = cardWidth >= 100.0;
+
+    return GestureDetector(
+      onSecondaryTapUp: (d) => _showContextMenu(context, d.globalPosition),
       child: Container(
         width: cardWidth,
         decoration: BoxDecoration(
@@ -2034,7 +2358,13 @@ class _VariantCard extends StatelessWidget {
                 width: cardWidth,
                 height: thumbHeight,
                 child: hasThumb
-                    ? Image.file(thumbFile!, fit: BoxFit.cover)
+                    ? variant.thumbnailBlurred
+                        ? ImageFiltered(
+                            imageFilter:
+                                ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+                            child: Image.file(thumbFile!, fit: BoxFit.cover),
+                          )
+                        : Image.file(thumbFile!, fit: BoxFit.cover)
                     : Container(
                         color: AppTheme.bgCard,
                         child: Icon(Icons.person_outline_rounded,
@@ -2111,7 +2441,9 @@ class _VariantCard extends StatelessWidget {
 
 enum _VariantAction {
   rename,
+  renameFile,
   changeThumbnail,
+  toggleBlur,
   duplicate,
   setMain,
   apply,

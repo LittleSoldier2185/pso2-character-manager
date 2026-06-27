@@ -1,0 +1,15 @@
+PSO2 Character Manager v1.4.4
+QoL improvements
+
+IMPROVEMENTS
+
+• Variant cards — left-click applies a variant; clicking an already-applied
+  variant unapplies it. Right-click still opens the context menu.
+• Rename file — rename a character file's name and extension directly from
+  the app. Works on both the main variant and individual variants.
+• Auto-fill name — the name field is pre-filled from the filename when
+  adding a new character. Editable before saving.
+• Main File — the "Character file" label in character detail renamed to
+  "Main File" for clarity.
+• Thumbnail blur — blur now applies in the random character spinner and
+  collection auto-thumbnails.
