@@ -185,8 +185,8 @@ class _ImportBundleDialogState extends State<ImportBundleDialog> {
           const Text('Import character bundle'),
         ],
       ),
-      content: SizedBox(
-        width: 420,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

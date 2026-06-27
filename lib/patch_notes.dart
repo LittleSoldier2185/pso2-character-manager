@@ -32,8 +32,13 @@ NEW FEATURES
   A new "Last modified" sort option is available in the sort menu across
   all screens that support sorting.
 
-• Random spinner — the dialog is now responsive and shrinks to fit smaller
-  windows instead of overflowing at its previous fixed 600px width.
+• Bulk actions — long-press any character card to enter selection mode.
+  Tap additional cards to select them, then use the action bar to move all
+  selected characters to the recycle bin or add them to a collection at once.
+
+• Responsive dialogs — all dialogs and panels now shrink to fit smaller
+  windows. Previously, dialogs had fixed widths and would overflow if the
+  window was too narrow.
 
 • Random spinner filters now persist — whitelist, blacklist, and the
   "Include variants" toggle are remembered when you close and reopen the
@@ -52,6 +57,27 @@ BUG FIXES
   on desktop_drop_plugin.dll and similar DLLs that Windows holds briefly
   after a process exits. Robocopy retry limits are also tightened so that
   if a lock does occur, the wait is 2 seconds instead of 30.
+
+NEW FEATURES (second batch)
+
+• Bulk tag management — with one or more characters selected, a new
+  "Tags" button appears in the selection bar. Tap any tag once to mark
+  it for adding to all selected characters, twice to mark it for removal,
+  three times to clear the action. Confirm with Apply.
+
+• Apply history — every apply and unapply is now recorded. Open
+  Settings → About → Apply history to browse the last 100 events with
+  character name, variant, action (applied / unapplied), and relative
+  timestamp.
+
+• Library backup — Settings → Storage → Backup library exports your
+  entire character library (characters, collections, tags, thumbnails,
+  gallery) to a dated zip file. The recycle bin is excluded to keep the
+  file size manageable.
+
+• Find duplicates — Settings → Storage → Find duplicates scans every
+  character file and groups any that share identical content. Results
+  show the character names and race/gender for each duplicate group.
 '''),
   _PatchEntry('1.4.4', 'QoL improvements', '''
 IMPROVEMENTS

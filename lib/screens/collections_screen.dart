@@ -1271,9 +1271,8 @@ class _AddCharactersDialogState extends State<_AddCharactersDialog> {
       backgroundColor: AppTheme.bgCard,
       shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12)),
-      child: SizedBox(
-        width: 480,
-        height: 560,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 560),
         child: Column(
           children: [
             // Header
@@ -1679,8 +1678,8 @@ class _CollectionDialogState extends State<_CollectionDialog>
       backgroundColor: AppTheme.bgCard,
       shape:
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: SizedBox(
-        width: 480,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

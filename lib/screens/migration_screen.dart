@@ -52,7 +52,7 @@ class _MigrationScreenState extends State<MigrationScreen> {
       backgroundColor: AppTheme.bgDark,
       body: Center(
         child: Container(
-          width: 420,
+          constraints: const BoxConstraints(maxWidth: 420),
           padding: const EdgeInsets.all(32),
           decoration: BoxDecoration(
             color: AppTheme.bgCard,

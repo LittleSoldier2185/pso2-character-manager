@@ -60,6 +60,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   AppUpdateInfo? _updateResult;
   bool _upToDate = false;
 
+  bool _backingUp = false;
+  int _backupDone = 0;
+  int _backupTotal = 0;
+
+  bool _scanningDupes = false;
+
   // ── Save location ──────────────────────────────────────────────
 
   Future<void> _changeSaveLocation(CharacterProvider provider) async {
@@ -150,9 +156,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: AppTheme.bgCard,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: SizedBox(
-          width: 480,
-          height: 360,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 480, maxHeight: 360),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -244,6 +249,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
       ),
     );
+  }
+
+  // ── Library backup ────────────────────────────────────────────
+
+  Future<void> _backupLibrary() async {
+    final folder = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Choose backup destination folder',
+    );
+    if (folder == null || !mounted) return;
+    final now = DateTime.now();
+    final stamp =
+        '${now.year}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')}';
+    final destPath = '$folder/PSO2_Backup_$stamp.zip';
+    setState(() { _backingUp = true; _backupDone = 0; _backupTotal = 0; });
+    try {
+      await DataService.instance.exportBackupZip(destPath, (done, total) {
+        if (mounted) setState(() { _backupDone = done; _backupTotal = total; });
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Backup saved'),
+          backgroundColor: Colors.green,
+        ));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('Backup failed: $e'),
+          backgroundColor: Colors.red,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _backingUp = false);
+    }
+  }
+
+  // ── Apply history ─────────────────────────────────────────────
+
+  Future<void> _showApplyHistory() async {
+    final entries = await DataService.instance.getApplyHistory();
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      builder: (_) => _ApplyHistoryDialog(entries: entries),
+    );
+  }
+
+  // ── Duplicate detection ───────────────────────────────────────
+
+  Future<void> _findDuplicates(CharacterProvider provider) async {
+    setState(() => _scanningDupes = true);
+    try {
+      final dupes =
+          await DataService.instance.findDuplicates(provider.allCharacters);
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (_) => _DuplicatesDialog(groups: dupes),
+      );
+    } finally {
+      if (mounted) setState(() => _scanningDupes = false);
+    }
   }
 
   // ── App update ────────────────────────────────────────────────
@@ -767,10 +834,99 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ),
         const SizedBox(height: 8),
+        const SizedBox(height: 24),
+        _sectionHeader('Backup'),
+        const SizedBox(height: 10),
+        _settingTile(
+          icon: Icons.archive_outlined,
+          title: 'Backup library',
+          subtitle: 'Export all characters, collections, and tags as a zip file',
+          trailing: _backingUp
+              ? SizedBox(
+                  width: 160,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        _backupTotal > 0
+                            ? 'Zipping $_backupDone / $_backupTotal…'
+                            : 'Preparing…',
+                        style: TextStyle(
+                            color: AppTheme.textSecondary, fontSize: 11),
+                      ),
+                      const SizedBox(height: 4),
+                      LinearProgressIndicator(
+                        value: _backupTotal > 0
+                            ? _backupDone / _backupTotal
+                            : null,
+                        backgroundColor: AppTheme.bgSurface,
+                        valueColor: AlwaysStoppedAnimation(AppTheme.accent),
+                        minHeight: 3,
+                      ),
+                    ],
+                  ),
+                )
+              : ElevatedButton.icon(
+                  onPressed: _backupLibrary,
+                  icon: const Icon(Icons.download_rounded, size: 14),
+                  label: const Text('Backup'),
+                  style: ElevatedButton.styleFrom(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                ),
+        ),
+        const SizedBox(height: 24),
+        _sectionHeader('Maintenance'),
+        const SizedBox(height: 10),
+        _settingTile(
+          icon: Icons.content_copy_outlined,
+          title: 'Find duplicate files',
+          subtitle: 'Scan for characters that share the same underlying file',
+          trailing: _scanningDupes
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : OutlinedButton.icon(
+                  onPressed: () => _findDuplicates(
+                      context.read<CharacterProvider>()),
+                  icon: const Icon(Icons.search_rounded, size: 14),
+                  label: const Text('Scan'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppTheme.textSecondary,
+                    side: BorderSide(color: AppTheme.borderColor),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                ),
+        ),
+        const SizedBox(height: 8),
       ];
 
   List<Widget> _aboutWidgets() => [
         _sectionHeader('About'),
+        const SizedBox(height: 10),
+        _settingTile(
+          icon: Icons.history_rounded,
+          title: 'Apply history',
+          subtitle: 'View recently applied and unapplied characters',
+          trailing: OutlinedButton(
+            onPressed: _showApplyHistory,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.textSecondary,
+              side: BorderSide(color: AppTheme.borderColor),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              textStyle: const TextStyle(fontSize: 12),
+            ),
+            child: const Text('View'),
+          ),
+        ),
         const SizedBox(height: 10),
         _settingTile(
           icon: Icons.article_outlined,
@@ -1019,6 +1175,250 @@ class _GlassIconButtonState extends State<_GlassIconButton> {
               color: _hovered
                   ? AppTheme.textPrimary
                   : AppTheme.textSecondary),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Apply history dialog ──────────────────────────────────────────
+
+class _ApplyHistoryDialog extends StatelessWidget {
+  final List<Map<String, dynamic>> entries;
+  const _ApplyHistoryDialog({required this.entries});
+
+  String _relativeTime(String iso) {
+    final dt = DateTime.tryParse(iso);
+    if (dt == null) return iso;
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${dt.year}-${dt.month.toString().padLeft(2,'0')}-${dt.day.toString().padLeft(2,'0')}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 520),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 14, 12),
+              child: Row(
+                children: [
+                  Icon(Icons.history_rounded, size: 16, color: AppTheme.accent),
+                  const SizedBox(width: 8),
+                  Text('Apply history',
+                      style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500)),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.close, size: 16, color: AppTheme.textSecondary),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: AppTheme.borderColor),
+            Expanded(
+              child: entries.isEmpty
+                  ? Center(
+                      child: Text('No history yet.',
+                          style: TextStyle(
+                              color: AppTheme.textSecondary, fontSize: 13)),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      itemCount: entries.length,
+                      itemBuilder: (_, i) {
+                        final e = entries[i];
+                        final isApply = e['action'] == 'apply';
+                        final variant = e['variantFolderName'] as String? ?? '';
+                        return ListTile(
+                          dense: true,
+                          leading: Icon(
+                            isApply
+                                ? Icons.check_circle_outline_rounded
+                                : Icons.remove_circle_outline_rounded,
+                            size: 18,
+                            color: isApply ? Colors.green : Colors.redAccent,
+                          ),
+                          title: Text(e['characterName'] as String? ?? '',
+                              style: TextStyle(
+                                  color: AppTheme.textPrimary, fontSize: 13)),
+                          subtitle: variant.isNotEmpty &&
+                                  variant != e['characterName']
+                              ? Text(variant,
+                                  style: TextStyle(
+                                      color: AppTheme.textSecondary,
+                                      fontSize: 11))
+                              : null,
+                          trailing: Text(
+                            _relativeTime(e['at'] as String? ?? ''),
+                            style: TextStyle(
+                                color: AppTheme.textSecondary, fontSize: 11),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            Divider(height: 1, color: AppTheme.borderColor),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── Duplicates dialog ─────────────────────────────────────────────
+
+class _DuplicatesDialog extends StatelessWidget {
+  final List<List<CharacterData>> groups;
+  const _DuplicatesDialog({required this.groups});
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 520, maxHeight: 540),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 14, 12),
+              child: Row(
+                children: [
+                  Icon(Icons.content_copy_outlined,
+                      size: 16, color: AppTheme.accent),
+                  const SizedBox(width: 8),
+                  Text('Duplicate files',
+                      style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500)),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.close,
+                        size: 16, color: AppTheme.textSecondary),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: AppTheme.borderColor),
+            Expanded(
+              child: groups.isEmpty
+                  ? Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.check_circle_outline_rounded,
+                              size: 36,
+                              color: Colors.green.withOpacity(0.7)),
+                          const SizedBox(height: 10),
+                          Text('No duplicate files found.',
+                              style: TextStyle(
+                                  color: AppTheme.textSecondary,
+                                  fontSize: 13)),
+                        ],
+                      ),
+                    )
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(12),
+                      itemCount: groups.length,
+                      itemBuilder: (_, gi) {
+                        final group = groups[gi];
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: AppTheme.bgSurface,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppTheme.borderColor),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Group ${gi + 1} — ${group.length} characters share the same file',
+                                style: TextStyle(
+                                    color: AppTheme.textSecondary,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500),
+                              ),
+                              const SizedBox(height: 6),
+                              ...group.map((c) => Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 3),
+                                    child: Row(
+                                      children: [
+                                        Icon(Icons.person_outline_rounded,
+                                            size: 14,
+                                            color: AppTheme.textSecondary),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            c.name,
+                                            style: TextStyle(
+                                                color: AppTheme.textPrimary,
+                                                fontSize: 13),
+                                          ),
+                                        ),
+                                        Text(
+                                          '${c.race} · ${c.gender[0]}',
+                                          style: TextStyle(
+                                              color: AppTheme.textSecondary,
+                                              fontSize: 11),
+                                        ),
+                                      ],
+                                    ),
+                                  )),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+            ),
+            Divider(height: 1, color: AppTheme.borderColor),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
       ),
     );

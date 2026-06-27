@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../main.dart';
 import '../models/character_data.dart';
+import '../models/tag_data.dart';
 import '../providers/character_provider.dart';
 import '../services/data_service.dart';
 import '../theme/app_theme.dart';
@@ -26,6 +27,9 @@ class _HomeScreenState extends State<HomeScreen> {
   static const List<double> _sizeExtents = [120, 160, 200, 260];
   static const List<double> _aspectRatios = [0.58, 0.62, 0.68, 0.72];
 
+  bool _selecting = false;
+  final Set<String> _selectedIds = {};
+
   @override
   void initState() {
     super.initState();
@@ -37,6 +41,16 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() => _cardSize = size);
   }
 
+  void _enterSelection(String firstId) =>
+      setState(() { _selecting = true; _selectedIds.add(firstId); });
+
+  void _exitSelection() =>
+      setState(() { _selecting = false; _selectedIds.clear(); });
+
+  void _toggleSelect(String id) => setState(() {
+    _selectedIds.contains(id) ? _selectedIds.remove(id) : _selectedIds.add(id);
+  });
+
   @override
   Widget build(BuildContext context) {
     return Consumer<CharacterProvider>(
@@ -47,13 +61,37 @@ class _HomeScreenState extends State<HomeScreen> {
 
         return Column(
           children: [
-            _TopBar(
-              cardSize: _cardSize,
-              onSizeChanged: (i) async {
-                setState(() => _cardSize = i);
-                await DataService.instance.saveCardSize(i);
-              },
-            ),
+            if (_selecting)
+              _SelectionBar(
+                count: _selectedIds.length,
+                collections: provider.allCollections,
+                tags: provider.allTags,
+                onCancel: _exitSelection,
+                onBin: () async {
+                  final ids = _selectedIds.toList();
+                  _exitSelection();
+                  await provider.bulkSoftDelete(ids);
+                },
+                onAddToCollection: (colId) async {
+                  final ids = _selectedIds.toList();
+                  _exitSelection();
+                  await provider.bulkAddToCollection(ids, colId);
+                },
+                onManageTags: (add, remove) async {
+                  final ids = _selectedIds.toList();
+                  _exitSelection();
+                  if (add.isNotEmpty) await provider.bulkAddTags(ids, add);
+                  if (remove.isNotEmpty) await provider.bulkRemoveTags(ids, remove);
+                },
+              )
+            else
+              _TopBar(
+                cardSize: _cardSize,
+                onSizeChanged: (i) async {
+                  setState(() => _cardSize = i);
+                  await DataService.instance.saveCardSize(i);
+                },
+              ),
             Expanded(
               child: provider.isLoading
                   ? SkeletonCardGrid(cardSize: _cardSize)
@@ -80,15 +118,17 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       itemCount: characters.length,
       itemBuilder: (context, index) {
-        final c = characters[index];
+        final c = characters[index] as CharacterData;
+        final sel = _selecting ? _selectedIds.contains(c.id) : null;
         return CharacterCard(
           character: c,
           cardSize: _cardSize,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) => CharacterDetailScreen(character: c)),
-          ),
+          selected: sel,
+          onLongPress: _selecting ? null : () => _enterSelection(c.id),
+          onTap: _selecting
+              ? () => _toggleSelect(c.id)
+              : () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => CharacterDetailScreen(character: c))),
         );
       },
     );
@@ -100,13 +140,15 @@ class _HomeScreenState extends State<HomeScreen> {
       itemCount: characters.length,
       itemBuilder: (context, index) {
         final c = characters[index] as CharacterData;
+        final sel = _selecting ? _selectedIds.contains(c.id) : null;
         return _CharacterListRow(
           character: c,
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(
-                builder: (_) => CharacterDetailScreen(character: c)),
-          ),
+          selected: sel,
+          onLongPress: _selecting ? null : () => _enterSelection(c.id),
+          onTap: _selecting
+              ? () => _toggleSelect(c.id)
+              : () => Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => CharacterDetailScreen(character: c))),
         );
       },
     );
@@ -145,6 +187,163 @@ class _HomeScreenState extends State<HomeScreen> {
               'Click "Add character" in the sidebar to get started',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Selection bar ──────────────────────────────────────────────────
+
+class _SelectionBar extends StatelessWidget {
+  final int count;
+  final List<dynamic> collections;
+  final List<TagData> tags;
+  final VoidCallback onCancel;
+  final VoidCallback onBin;
+  final void Function(String collectionId) onAddToCollection;
+  final void Function(List<String> add, List<String> remove) onManageTags;
+
+  const _SelectionBar({
+    required this.count,
+    required this.collections,
+    required this.tags,
+    required this.onCancel,
+    required this.onBin,
+    required this.onAddToCollection,
+    required this.onManageTags,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      decoration: BoxDecoration(
+        color: AppTheme.bgCard,
+        border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
+      ),
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: onCancel,
+            icon: const Icon(Icons.close_rounded),
+            iconSize: 18,
+            color: AppTheme.textSecondary,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            '$count selected',
+            style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 14,
+                fontWeight: FontWeight.w500),
+          ),
+          const Spacer(),
+          if (collections.isNotEmpty)
+            TextButton.icon(
+              onPressed: count == 0 ? null : () => _pickCollection(context),
+              icon: const Icon(Icons.folder_rounded, size: 15),
+              label: const Text('Collection'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppTheme.textSecondary,
+                textStyle: const TextStyle(fontSize: 12),
+              ),
+            ),
+          const SizedBox(width: 4),
+          TextButton.icon(
+            onPressed: count == 0 ? null : () => _manageTags(context),
+            icon: const Icon(Icons.label_outline_rounded, size: 15),
+            label: const Text('Tags'),
+            style: TextButton.styleFrom(
+              foregroundColor: AppTheme.textSecondary,
+              textStyle: const TextStyle(fontSize: 12),
+            ),
+          ),
+          const SizedBox(width: 4),
+          TextButton.icon(
+            onPressed: count == 0 ? null : () => _confirmBin(context),
+            icon: const Icon(Icons.delete_outline_rounded, size: 15),
+            label: const Text('Move to bin'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.redAccent,
+              textStyle: const TextStyle(fontSize: 12),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _manageTags(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => _BulkTagDialog(
+        tags: tags,
+        onApply: (add, remove) => onManageTags(add, remove),
+      ),
+    );
+  }
+
+  void _pickCollection(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: const Text('Add to collection'),
+        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+        content: SizedBox(
+          width: 280,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: collections.length,
+            itemBuilder: (ctx, i) {
+              final col = collections[i];
+              return ListTile(
+                dense: true,
+                leading: Icon(Icons.folder_rounded,
+                    size: 18, color: AppTheme.accent),
+                title: Text(col.name,
+                    style: TextStyle(
+                        color: AppTheme.textPrimary, fontSize: 13)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  onAddToCollection(col.id);
+                },
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+        ],
+      ),
+    );
+  }
+
+  void _confirmBin(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: const Text('Move to Recycle Bin?'),
+        content: Text(
+          'Move $count character${count == 1 ? '' : 's'} to the recycle bin? '
+          'They will be permanently deleted after 7 days.',
+          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          ElevatedButton(
+            onPressed: () { Navigator.pop(context); onBin(); },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            child: const Text('Move to Bin'),
+          ),
         ],
       ),
     );
@@ -597,15 +796,28 @@ String _fmtRelative(DateTime dt) {
 class _CharacterListRow extends StatelessWidget {
   final CharacterData character;
   final VoidCallback onTap;
+  final bool? selected;
+  final VoidCallback? onLongPress;
 
-  const _CharacterListRow({required this.character, required this.onTap});
+  const _CharacterListRow({
+    required this.character,
+    required this.onTap,
+    this.selected,
+    this.onLongPress,
+  });
 
   @override
   Widget build(BuildContext context) {
     final tier = character.tier;
     return InkWell(
       onTap: onTap,
-      child: Container(
+      onLongPress: onLongPress,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        color: selected == true
+            ? AppTheme.accent.withOpacity(0.12)
+            : Colors.transparent,
+        child: Container(
         height: 56,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
@@ -687,8 +899,28 @@ class _CharacterListRow extends StatelessWidget {
                   ),
                 ),
               ),
-            ApplyToggleButton(character: character),
+            if (selected == null)
+              ApplyToggleButton(character: character)
+            else
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 150),
+                width: 22,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: selected! ? AppTheme.accent : Colors.transparent,
+                  borderRadius: BorderRadius.circular(11),
+                  border: Border.all(
+                    color: selected! ? AppTheme.accent : AppTheme.borderColor,
+                    width: 1.5,
+                  ),
+                ),
+                child: selected!
+                    ? const Icon(Icons.check_rounded,
+                        size: 13, color: Colors.white)
+                    : null,
+              ),
           ],
+        ),
         ),
       ),
     );
@@ -1445,6 +1677,105 @@ class _SavePresetButton extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ── Bulk tag dialog ───────────────────────────────────────────────
+
+class _BulkTagDialog extends StatefulWidget {
+  final List<TagData> tags;
+  final void Function(List<String> add, List<String> remove) onApply;
+  const _BulkTagDialog({required this.tags, required this.onApply});
+
+  @override
+  State<_BulkTagDialog> createState() => _BulkTagDialogState();
+}
+
+class _BulkTagDialogState extends State<_BulkTagDialog> {
+  final Set<String> _toAdd    = {};
+  final Set<String> _toRemove = {};
+
+  // toggle: unchecked → add → remove → unchecked
+  void _cycle(String id) => setState(() {
+    if (_toAdd.contains(id)) { _toAdd.remove(id); _toRemove.add(id); }
+    else if (_toRemove.contains(id)) { _toRemove.remove(id); }
+    else { _toAdd.add(id); }
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: AppTheme.bgCard,
+      title: Text('Manage tags',
+          style: TextStyle(color: AppTheme.textPrimary, fontSize: 15)),
+      content: widget.tags.isEmpty
+          ? Text('No tags yet.',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13))
+          : SizedBox(
+              width: 300,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Tap once to add to all selected · twice to remove · three times to clear.',
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                  ),
+                  const SizedBox(height: 10),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 320),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: widget.tags.map((tag) {
+                          final adding   = _toAdd.contains(tag.id);
+                          final removing = _toRemove.contains(tag.id);
+                          return ListTile(
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                            leading: Container(
+                              width: 10,
+                              height: 10,
+                              decoration: BoxDecoration(
+                                color: tag.color,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            title: Text(tag.name,
+                                style: TextStyle(
+                                    color: AppTheme.textPrimary, fontSize: 13)),
+                            trailing: adding
+                                ? Icon(Icons.add_circle_rounded,
+                                    size: 18, color: Colors.green)
+                                : removing
+                                    ? Icon(Icons.remove_circle_rounded,
+                                        size: 18, color: Colors.redAccent)
+                                    : Icon(Icons.circle_outlined,
+                                        size: 18, color: AppTheme.borderColor),
+                            onTap: () => _cycle(tag.id),
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: (_toAdd.isEmpty && _toRemove.isEmpty)
+              ? null
+              : () {
+                  Navigator.pop(context);
+                  widget.onApply(_toAdd.toList(), _toRemove.toList());
+                },
+          child: const Text('Apply'),
+        ),
+      ],
     );
   }
 }

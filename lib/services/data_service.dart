@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:archive/archive.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -806,6 +807,41 @@ class DataService {
         .convert(tags.map((t) => t.toJson()).toList()));
   }
 
+  // ── Apply history ─────────────────────────────────────────────────
+
+  String get _applyHistoryPath => p.join(_appRootPath, 'apply_history.json');
+
+  Future<void> addApplyHistoryEntry({
+    required String characterId,
+    required String characterName,
+    required String variantFolderName,
+    required bool isApply,
+  }) async {
+    final file = File(_applyHistoryPath);
+    List<dynamic> entries = [];
+    if (await file.exists()) {
+      try { entries = jsonDecode(await file.readAsString()) as List; } catch (_) {}
+    }
+    entries.insert(0, {
+      'characterId':       characterId,
+      'characterName':     characterName,
+      'variantFolderName': variantFolderName,
+      'action':            isApply ? 'apply' : 'unapply',
+      'at':                DateTime.now().toIso8601String(),
+    });
+    if (entries.length > 100) entries = entries.sublist(0, 100);
+    await file.writeAsString(jsonEncode(entries));
+  }
+
+  Future<List<Map<String, dynamic>>> getApplyHistory() async {
+    final file = File(_applyHistoryPath);
+    if (!await file.exists()) return [];
+    try {
+      return (jsonDecode(await file.readAsString()) as List)
+          .cast<Map<String, dynamic>>();
+    } catch (_) { return []; }
+  }
+
   // ── File export ───────────────────────────────────────────────────
 
   Future<void> exportCharacterFile(
@@ -837,6 +873,68 @@ class DataService {
       }
     }
     return unregistered;
+  }
+
+  // ── Library backup ────────────────────────────────────────────────
+
+  Future<void> exportBackupZip(
+    String destFilePath,
+    void Function(int done, int total)? onProgress,
+  ) async {
+    final archive = Archive();
+    final root = Directory(_dataRootPath);
+    if (!await root.exists()) return;
+
+    final entities = root.listSync(recursive: true, followLinks: false);
+    final total = entities.length;
+    int done = 0;
+
+    for (final entity in entities) {
+      if (entity is File) {
+        final relative = p.relative(entity.path, from: _dataRootPath);
+        // Skip recycle bin to keep backup manageable
+        if (relative.startsWith('recycle_bin${p.separator}') ||
+            relative.startsWith('recycle_bin/')) {
+          onProgress?.call(++done, total);
+          continue;
+        }
+        try {
+          final bytes = await entity.readAsBytes();
+          archive.addFile(ArchiveFile(
+            relative.replaceAll('\\', '/'),
+            bytes.length,
+            bytes,
+          ));
+        } catch (_) {}
+      }
+      onProgress?.call(++done, total);
+    }
+
+    final zipBytes = ZipEncoder().encode(archive);
+    if (zipBytes != null) {
+      await File(destFilePath).writeAsBytes(zipBytes);
+    }
+  }
+
+  // ── Duplicate detection ───────────────────────────────────────────
+
+  Future<List<List<CharacterData>>> findDuplicates(
+      List<CharacterData> characters) async {
+    final groups = <String, List<CharacterData>>{};
+
+    for (final c in characters) {
+      final path = c.characterFilePath;
+      if (path == null) continue;
+      final file = File(path);
+      if (!await file.exists()) continue;
+      try {
+        final bytes = await file.readAsBytes();
+        final key = '${bytes.length}_${getCrc32(bytes)}';
+        groups.putIfAbsent(key, () => []).add(c);
+      } catch (_) {}
+    }
+
+    return groups.values.where((g) => g.length > 1).toList();
   }
 
   // ── Save location migration ───────────────────────────────────────

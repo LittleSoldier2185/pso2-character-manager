@@ -95,8 +95,8 @@ class _ExportBundleDialogState extends State<ExportBundleDialog> {
           const Text('Export character bundle'),
         ],
       ),
-      content: SizedBox(
-        width: 360,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,

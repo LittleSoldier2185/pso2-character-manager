@@ -113,9 +113,8 @@ class _UpdateCheckDialogState extends State<UpdateCheckDialog> {
         return Dialog(
           backgroundColor: AppTheme.bgCard,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          child: SizedBox(
-            width: 560,
-            height: 480,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 560, maxHeight: 480),
             child: Column(
               children: [
                 // ── Header ─────────────────────────────────────────
@@ -264,8 +263,8 @@ class _UpdateCheckDialogState extends State<UpdateCheckDialog> {
     return Dialog(
       backgroundColor: AppTheme.bgCard,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: SizedBox(
-        width: 380,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 380),
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(

@@ -525,6 +525,48 @@ class CharacterProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> bulkSoftDelete(List<String> ids) async {
+    for (final id in ids) {
+      final c = _characters.firstWhere((c) => c.id == id);
+      if (c.isApplied && _gameFolderPath != null) await _removeFromGameFolder(c);
+      await _data.softDeleteCharacter(c);
+      _pendingUpdates.remove(id);
+      _galleryCache.remove(id);
+    }
+    _characters.removeWhere((c) => ids.contains(c.id));
+    _trashItems = await _data.listTrash();
+    notifyListeners();
+  }
+
+  Future<void> bulkAddToCollection(List<String> ids, String collectionId) async {
+    for (final c in _characters.where((c) => ids.contains(c.id))) {
+      if (!c.collectionIds.contains(collectionId)) {
+        c.collectionIds = [...c.collectionIds, collectionId];
+        await _data.saveCharacter(c);
+      }
+    }
+    notifyListeners();
+  }
+
+  Future<void> bulkAddTags(List<String> characterIds, List<String> tagIds) async {
+    for (final c in _characters.where((c) => characterIds.contains(c.id))) {
+      final added = tagIds.where((id) => !c.tags.contains(id)).toList();
+      if (added.isEmpty) continue;
+      c.tags = [...c.tags, ...added];
+      await _data.saveCharacter(c);
+    }
+    notifyListeners();
+  }
+
+  Future<void> bulkRemoveTags(List<String> characterIds, List<String> tagIds) async {
+    for (final c in _characters.where((c) => characterIds.contains(c.id))) {
+      final before = c.tags.length;
+      c.tags = c.tags.where((id) => !tagIds.contains(id)).toList();
+      if (c.tags.length != before) await _data.saveCharacter(c);
+    }
+    notifyListeners();
+  }
+
   Future<void> restoreCharacter(String id) async {
     final char = await _data.restoreCharacter(id);
     if (char != null) {
@@ -657,6 +699,12 @@ class CharacterProvider extends ChangeNotifier {
     character.mainVariantData?.lastSyncedAt = DateTime.now();
     _pendingUpdates.remove(character.id);
     await _data.saveCharacter(character);
+    _data.addApplyHistoryEntry(
+      characterId: character.id,
+      characterName: character.name,
+      variantFolderName: variantFolderName,
+      isApply: true,
+    );
     notifyListeners();
     return null;
   }
@@ -666,6 +714,14 @@ class CharacterProvider extends ChangeNotifier {
       for (final vName in character.appliedVariants) {
         await _removeVariantFromGameFolder(character, vName);
       }
+    }
+    for (final vName in character.appliedVariants) {
+      _data.addApplyHistoryEntry(
+        characterId: character.id,
+        characterName: character.name,
+        variantFolderName: vName,
+        isApply: false,
+      );
     }
     character.appliedVariants = [];
     await _data.saveCharacter(character);

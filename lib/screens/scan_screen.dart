@@ -439,8 +439,8 @@ class _ScanImportDialogState extends State<_ScanImportDialog> {
           const Text('Import character file'),
         ],
       ),
-      content: SizedBox(
-        width: 420,
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
         child: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,

@@ -14,6 +14,8 @@ class CharacterCard extends StatelessWidget {
   final VoidCallback onTap;
   final int cardSize; // 0=S,1=M,2=L,3=XL
   final String? variantFolderName;
+  final bool? selected; // null = not in selection mode
+  final VoidCallback? onLongPress;
 
   const CharacterCard({
     super.key,
@@ -21,6 +23,8 @@ class CharacterCard extends StatelessWidget {
     required this.onTap,
     this.cardSize = 2,
     this.variantFolderName,
+    this.selected,
+    this.onLongPress,
   });
 
   @override
@@ -39,6 +43,7 @@ class CharacterCard extends StatelessWidget {
 
         final card = InkWell(
           onTap: onTap,
+          onLongPress: onLongPress,
           borderRadius: BorderRadius.circular(10),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
@@ -146,6 +151,44 @@ class CharacterCard extends StatelessWidget {
                                     fontSize: 9,
                                     fontWeight: FontWeight.w600),
                               ),
+                            ),
+                          ),
+                        // Selection overlay
+                        if (selected != null)
+                          Positioned.fill(
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              decoration: BoxDecoration(
+                                color: selected!
+                                    ? AppTheme.accent.withOpacity(0.35)
+                                    : Colors.transparent,
+                              ),
+                            ),
+                          ),
+                        if (selected != null)
+                          Positioned(
+                            top: 6,
+                            right: 6,
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 150),
+                              width: 20,
+                              height: 20,
+                              decoration: BoxDecoration(
+                                color: selected!
+                                    ? AppTheme.accent
+                                    : Colors.black.withOpacity(0.4),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: selected!
+                                      ? AppTheme.accent
+                                      : Colors.white.withOpacity(0.6),
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: selected!
+                                  ? const Icon(Icons.check_rounded,
+                                      size: 13, color: Colors.white)
+                                  : null,
                             ),
                           ),
                       ],

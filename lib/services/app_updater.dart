@@ -15,8 +15,8 @@ class AppUpdater {
       builder: (_) => Dialog(
         backgroundColor: AppTheme.bgCard,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: SizedBox(
-          width: 360,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 360),
           child: Padding(
             padding: const EdgeInsets.all(24),
             child: Column(
@@ -182,8 +182,8 @@ class _ProgressDialog extends StatelessWidget {
     return Dialog(
       backgroundColor: AppTheme.bgCard,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: SizedBox(
-        width: 360,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 360),
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(
