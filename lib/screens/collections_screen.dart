@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:ui';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
@@ -495,7 +496,18 @@ class _PreviewCell extends StatelessWidget {
   Widget build(BuildContext context) {
     if (character.thumbnailPath != null) {
       final file = File(character.thumbnailPath!);
-      if (file.existsSync()) return Image.file(file, fit: BoxFit.cover);
+      if (file.existsSync()) {
+        final isBlurred = character.thumbnailBlurred ||
+            (character.mainVariantData?.thumbnailBlurred ?? false);
+        Widget img = Image.file(file, fit: BoxFit.cover);
+        if (isBlurred) {
+          img = ImageFiltered(
+            imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: img,
+          );
+        }
+        return img;
+      }
     }
     return Container(
       color: AppTheme.bgSurface,

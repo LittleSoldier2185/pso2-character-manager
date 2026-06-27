@@ -475,6 +475,19 @@ class CharacterProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> toggleThumbnailBlur(CharacterData character) async {
+    character.thumbnailBlurred = !character.thumbnailBlurred;
+    await _data.saveCharacter(character);
+    notifyListeners();
+  }
+
+  Future<void> toggleVariantThumbnailBlur(
+      CharacterData character, VariantData variant) async {
+    variant.thumbnailBlurred = !variant.thumbnailBlurred;
+    await _data.saveCharacter(character);
+    notifyListeners();
+  }
+
   Future<void> setTier(CharacterData character, CharacterTier? tier) async {
     character.tier = tier;
     await _data.saveCharacter(character);
@@ -1431,6 +1444,31 @@ class CharacterProvider extends ChangeNotifier {
     variant.displayName = newName;
     await _data.saveCharacter(character);
     notifyListeners();
+  }
+
+  /// Renames the physical character file inside [variant]'s folder.
+  /// Returns null on success, error string on failure.
+  Future<String?> renameVariantFile(
+    CharacterData character,
+    VariantData variant,
+    String newStem,
+    String newExtension,
+  ) async {
+    final currentFile = character.charFileForVariant(variant.folderName);
+    if (currentFile == null) return 'No character file found in this variant.';
+    final newName = '$newStem.$newExtension';
+    final newPath = p.join(p.dirname(currentFile), newName);
+    if (currentFile == newPath) return null;
+    if (File(newPath).existsSync()) return 'A file named "$newName" already exists.';
+    try {
+      await File(currentFile).rename(newPath);
+      variant.originalFileName = newName;
+      await _data.saveCharacter(character);
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return 'Error renaming file: $e';
+    }
   }
 
   /// Returns null on success, error string on failure.

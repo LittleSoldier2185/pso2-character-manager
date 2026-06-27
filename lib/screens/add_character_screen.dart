@@ -32,6 +32,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
   bool _isSaving = false;
   bool _isDraggingFile = false;
   bool _isDraggingImage = false;
+  bool _nameWasAutoFilled = false;
   CharacterData? _targetCharacter; // if set, save as variant of this character
 
   // Conflict resolution state
@@ -60,6 +61,10 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
   void _setCharFile(String path) {
     if (!CharacterData.isValidExtension(path)) return;
     final raceGender = CharacterData.detectRaceGender(path);
+    if (_nameController.text.isEmpty || _nameWasAutoFilled) {
+      _nameController.text = p.basenameWithoutExtension(path);
+      _nameWasAutoFilled = true;
+    }
     setState(() {
       _selectedCharFilePath = path;
       _detectedRace = raceGender['race'];
@@ -578,6 +583,7 @@ class _AddCharacterScreenState extends State<AddCharacterScreen> {
                     const SizedBox(height: 6),
                     TextFormField(
                       controller: _nameController,
+                      onChanged: (_) => _nameWasAutoFilled = false,
                       decoration: InputDecoration(
                           hintText: _targetCharacter != null
                               ? 'e.g. Summer look, Battle outfit…'

@@ -10,6 +10,7 @@ Runs the full release cycle for PSO2 Character Manager:
 3. Create `RELEASE_vX.Y.Z.txt` in the project root
 4. Bump `version:` in `pubspec.yaml`
 5. Commit and push to GitHub
+6. Print the GitHub release description for the user to paste into the GitHub release page
 
 ## Steps
 
@@ -85,7 +86,56 @@ IMPROVEMENT
   download and install manually.
 ```
 
-### 4 — Bump pubspec.yaml
+### 4 — GitHub release description
+After creating the `.txt` file, print the GitHub release description so the user can paste it into the GitHub release page. This uses markdown because GitHub renders it.
+
+**Title field** (GitHub "Release title" input):
+```
+PSO2 Character Manager V{X.X.X} — {Tagline}
+```
+
+**Body format — feature/minor release:**
+```markdown
+{1–2 sentence summary of what this release is about.}
+
+## New Features
+
+**Feature Name** — what it does and why it matters.
+
+**Another Feature** — description.
+
+## Improvements
+
+**Item** — description.
+
+## Bug Fixes
+
+**Bug name** — what was wrong and what was fixed.
+```
+
+**Body format — patch release:**
+```markdown
+{One sentence describing what this fixes or changes.}
+
+## Bug Fix
+
+**What** — what was wrong and what was fixed.
+
+---
+No action required. Install and launch normally.
+```
+
+**Rules (enforced every release):**
+- Title field always `PSO2 Character Manager V{X.X.X} — {Tagline}` — capital V, em dash
+- Sections: `##` headers, only include sections that have content
+- Items: `**Name** — description` — em dash between name and detail
+- No emoji anywhere — renders inconsistently across platforms
+- Present tense: "fixes", "adds", "shows" — not "fixed", "added"
+- Patches always end with `---` + `No action required. Install and launch normally.`
+  or a migration note if data changes are involved
+- Section names: `## New Features`, `## Improvements`, `## Bug Fixes`, `## Performance`, `## UI`
+
+### 5 — Bump pubspec.yaml
 Change the `version:` line. This is the single source of truth — `kAppVersion` reads from the exe at runtime via `package_info_plus`.
 
 ### 5 — Commit and push

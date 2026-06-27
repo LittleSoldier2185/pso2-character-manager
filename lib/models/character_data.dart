@@ -48,6 +48,7 @@ class VariantData {
   final DateTime createdAt;
   DateTime? lastSyncedAt;
   String? originalFileName;
+  bool thumbnailBlurred;
 
   VariantData({
     required this.folderName,
@@ -55,6 +56,7 @@ class VariantData {
     DateTime? createdAt,
     this.lastSyncedAt,
     this.originalFileName,
+    this.thumbnailBlurred = false,
   }) : createdAt = createdAt ?? DateTime.now();
 
   Map<String, dynamic> toJson() => {
@@ -63,6 +65,7 @@ class VariantData {
     'createdAt': createdAt.toIso8601String(),
     'lastSyncedAt': lastSyncedAt?.toIso8601String(),
     'originalFileName': originalFileName,
+    'thumbnailBlurred': thumbnailBlurred,
   };
 
   factory VariantData.fromJson(Map<String, dynamic> j) => VariantData(
@@ -73,6 +76,7 @@ class VariantData {
         ? DateTime.parse(j['lastSyncedAt'] as String)
         : null,
     originalFileName: j['originalFileName'] as String?,
+    thumbnailBlurred: (j['thumbnailBlurred'] as bool?) ?? false,
   );
 }
 
@@ -107,6 +111,8 @@ class CharacterData {
   String? customBorderEffect;
   int? customBorderColor;
 
+  bool thumbnailBlurred;
+
   // Absolute path to the character's root folder — not serialized
   final String folderPath;
 
@@ -129,6 +135,7 @@ class CharacterData {
     List<VariantData>? variants,
     this.customBorderEffect,
     this.customBorderColor,
+    this.thumbnailBlurred = false,
   })  : tags = tags ?? [],
         collectionIds = collectionIds ?? [],
         appliedVariants = appliedVariants ?? [],
@@ -284,6 +291,7 @@ class CharacterData {
     'variants': variants.map((v) => v.toJson()).toList(),
     'customBorderEffect': customBorderEffect,
     'customBorderColor': customBorderColor,
+    'thumbnailBlurred': thumbnailBlurred,
   };
 
   factory CharacterData.fromJson(
@@ -312,6 +320,7 @@ class CharacterData {
             [],
         customBorderEffect: j['customBorderEffect'] as String?,
         customBorderColor: j['customBorderColor'] as int?,
+        thumbnailBlurred: (j['thumbnailBlurred'] as bool?) ?? false,
         folderPath: folderPath,
       );
 }

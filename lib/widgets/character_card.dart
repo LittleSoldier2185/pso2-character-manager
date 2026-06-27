@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math' show pi;
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/character_data.dart';
@@ -281,13 +282,23 @@ class CharacterCard extends StatelessWidget {
   }
 
   Widget _buildThumbnail() {
-    final thumbPath = variantFolderName != null
+    final isVariant = variantFolderName != null;
+    final thumbPath = isVariant
         ? character.thumbnailForVariant(variantFolderName!)
         : character.thumbnailPath;
+    final isBlurred = isVariant
+        ? (character.variants
+                .where((v) => v.folderName == variantFolderName)
+                .firstOrNull
+                ?.thumbnailBlurred ??
+            false)
+        : character.thumbnailBlurred ||
+            (character.mainVariantData?.thumbnailBlurred ?? false);
+
     if (thumbPath != null) {
       final file = File(thumbPath);
       if (file.existsSync()) {
-        return Image.file(
+        Widget img = Image.file(
           file,
           fit: BoxFit.cover,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
@@ -295,6 +306,13 @@ class CharacterCard extends StatelessWidget {
             return ColoredBox(color: AppTheme.bgSurface);
           },
         );
+        if (isBlurred) {
+          img = ImageFiltered(
+            imageFilter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+            child: img,
+          );
+        }
+        return img;
       }
     }
     return Container(
@@ -302,8 +320,7 @@ class CharacterCard extends StatelessWidget {
       child: Center(
         child: Icon(Icons.person_outline,
             size: 36,
-            color:
-                AppTheme.raceColor(character.race).withOpacity(0.35)),
+            color: AppTheme.raceColor(character.race).withOpacity(0.35)),
       ),
     );
   }

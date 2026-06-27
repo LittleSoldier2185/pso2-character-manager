@@ -12,6 +12,25 @@ class _PatchEntry {
 }
 
 const _entries = [
+  _PatchEntry('1.4.4', 'QoL improvements', '''
+IMPROVEMENTS
+
+• Variant cards — left-click now instantly applies a variant; clicking an
+  already-applied variant unapplies it. Right-click still opens the context menu.
+
+• Auto-fill name — adding a new character now pre-fills the name field from
+  the filename. You can still edit it freely before saving.
+
+• Rename file — the Main File section in character detail now has an edit button
+  to rename the character file's name and extension (e.g. fhp → mhp) directly
+  from the app. Works on both the main variant and any individual variant.
+
+• Main File label — the "Character file" section in character detail has been
+  renamed to "Main File" for clarity.
+
+• Thumbnail blur — blurred thumbnails now apply in the random character spinner
+  and collection auto-thumbnails (when no custom collection thumbnail is set).
+'''),
   _PatchEntry('1.4.3', 'Auto-updater reliability fix', '''
 BUG FIX
 
