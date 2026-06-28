@@ -13,6 +13,7 @@ import '../widgets/character_spinner.dart';
 import '../widgets/skeleton.dart';
 import 'character_detail_screen.dart';
 import 'import_bundle_dialog.dart';
+import 'import_card_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -601,9 +602,41 @@ class _TopBarState extends State<_TopBar> {
                   ),
                   const SizedBox(width: 2),
 
-                  // ── Import bundle button ──────────────────
-                  GestureDetector(
-                    onTap: () => showImportBundlePicker(context),
+                  // ── Import button ─────────────────────────
+                  PopupMenuButton<String>(
+                    tooltip: 'Import character',
+                    color: AppTheme.bgCard,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(color: AppTheme.borderColor),
+                    ),
+                    offset: const Offset(0, 32),
+                    onSelected: (v) {
+                      if (v == 'bundle') showImportBundlePicker(context);
+                      if (v == 'card') showImportCardPicker(context);
+                    },
+                    itemBuilder: (_) => [
+                      PopupMenuItem<String>(
+                        value: 'card',
+                        child: Row(children: [
+                          Icon(Icons.image_outlined,
+                              size: 14, color: AppTheme.textSecondary),
+                          const SizedBox(width: 8),
+                          Text('Import from card image',
+                              style: TextStyle(fontSize: 12)),
+                        ]),
+                      ),
+                      PopupMenuItem<String>(
+                        value: 'bundle',
+                        child: Row(children: [
+                          Icon(Icons.file_download_outlined,
+                              size: 14, color: AppTheme.textSecondary),
+                          const SizedBox(width: 8),
+                          Text('Import .pso2char bundle',
+                              style: TextStyle(fontSize: 12)),
+                        ]),
+                      ),
+                    ],
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
@@ -612,8 +645,7 @@ class _TopBarState extends State<_TopBar> {
                         border: Border.all(color: AppTheme.borderColor),
                       ),
                       child: Icon(Icons.file_download_outlined,
-                          size: 14,
-                          color: AppTheme.textSecondary),
+                          size: 14, color: AppTheme.textSecondary),
                     ),
                   ),
                   const SizedBox(width: 6),
@@ -809,6 +841,7 @@ class _CharacterListRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tier = character.tier;
+    final lastApplied = context.read<CharacterProvider>().lastAppliedAt(character.id);
     return InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -875,7 +908,9 @@ class _CharacterListRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    '${character.race} · ${character.gender[0]} · ${_fmtRelative(character.lastModifiedAt)}',
+                    lastApplied != null
+                        ? '${character.race} · ${character.gender[0]} · Applied ${_fmtRelative(lastApplied)}'
+                        : '${character.race} · ${character.gender[0]} · ${_fmtRelative(character.lastModifiedAt)}',
                     style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
                   ),
                 ],

@@ -20,6 +20,20 @@ class _AppliedScreenState extends State<AppliedScreen> {
   int _cardSize = 2;
   SortOption _sortOption = SortOption.nameAZ;
 
+  bool _selecting = false;
+  final Set<(String, String)> _selectedPairs = {}; // (characterId, variantFolderName)
+
+  void _enterSelection(String charId, String variantName) =>
+      setState(() { _selecting = true; _selectedPairs.add((charId, variantName)); });
+
+  void _exitSelection() =>
+      setState(() { _selecting = false; _selectedPairs.clear(); });
+
+  void _togglePair(String charId, String variantName) => setState(() {
+    final pair = (charId, variantName);
+    _selectedPairs.contains(pair) ? _selectedPairs.remove(pair) : _selectedPairs.add(pair);
+  });
+
   static const List<double> _sizeExtents  = [120, 160, 200, 260];
   static const List<double> _aspectRatios = [0.58, 0.62, 0.68, 0.72];
 
@@ -142,6 +156,55 @@ class _AppliedScreenState extends State<AppliedScreen> {
 
         return Column(
           children: [
+            // ── Selection bar ────────────────────────────────────
+            if (_selecting)
+              Container(
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.bgCard,
+                  border: Border(bottom: BorderSide(color: AppTheme.borderColor)),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: _exitSelection,
+                      icon: const Icon(Icons.close_rounded),
+                      iconSize: 18,
+                      color: AppTheme.textSecondary,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      '${_selectedPairs.length} selected',
+                      style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500),
+                    ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: _selectedPairs.isEmpty ? null : () async {
+                        final pairs = _selectedPairs.toList();
+                        _exitSelection();
+                        for (final (charId, vName) in pairs) {
+                          final c = provider.allCharacters
+                              .where((x) => x.id == charId)
+                              .firstOrNull;
+                          if (c != null) await provider.unapplyVariant(c, vName);
+                        }
+                      },
+                      icon: const Icon(Icons.cancel_outlined, size: 15),
+                      label: const Text('Unapply'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.redAccent,
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // ── Top bar ─────────────────────────────────────────
             Container(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
@@ -257,16 +320,25 @@ class _AppliedScreenState extends State<AppliedScreen> {
                           itemCount: pairs.length,
                           itemBuilder: (context, index) {
                             final (c, vName) = pairs[index];
+                            final sel = _selecting
+                                ? _selectedPairs.contains((c.id, vName))
+                                : null;
                             return CharacterCard(
                               character: c,
                               cardSize: _cardSize,
                               variantFolderName: vName,
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                    builder: (_) =>
-                                        CharacterDetailScreen(character: c)),
-                              ),
+                              selected: sel,
+                              onLongPress: _selecting
+                                  ? null
+                                  : () => _enterSelection(c.id, vName),
+                              onTap: _selecting
+                                  ? () => _togglePair(c.id, vName)
+                                  : () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                            builder: (_) =>
+                                                CharacterDetailScreen(character: c)),
+                                      ),
                             );
                           },
                         ),

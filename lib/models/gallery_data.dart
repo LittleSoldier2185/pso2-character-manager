@@ -6,6 +6,7 @@ class GalleryItemData {
   final String fileName; // relative to character_gallery/ folder
   final DateTime addedAt;
   bool isBlurred;
+  String? caption;
 
   GalleryItemData({
     required this.id,
@@ -13,6 +14,7 @@ class GalleryItemData {
     required this.fileName,
     DateTime? addedAt,
     this.isBlurred = false,
+    this.caption,
   }) : addedAt = addedAt ?? DateTime.now();
 
   /// Absolute path, given the character's folder path.
@@ -25,6 +27,7 @@ class GalleryItemData {
     'fileName': fileName,
     'addedAt': addedAt.toIso8601String(),
     'isBlurred': isBlurred,
+    'caption': caption,
   };
 
   factory GalleryItemData.fromJson(Map<String, dynamic> j) => GalleryItemData(
@@ -33,5 +36,6 @@ class GalleryItemData {
     fileName: j['fileName'] as String,
     addedAt: DateTime.parse(j['addedAt'] as String),
     isBlurred: (j['isBlurred'] as bool?) ?? false,
+    caption: j['caption'] as String?,
   );
 }

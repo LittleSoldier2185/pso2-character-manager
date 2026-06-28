@@ -88,8 +88,8 @@ const String thumbnailModeStatic = 'static';
 class CharacterData {
   final String id;
   String name;
-  final String race;
-  final String gender;
+  String race;
+  String gender;
   String description;
   List<String> tags;
   List<String> collectionIds;

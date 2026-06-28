@@ -17,6 +17,7 @@ import '../widgets/tag_chip.dart';
 import '../widgets/tier_border.dart';
 import 'add_variant_screen.dart';
 import 'export_bundle_dialog.dart';
+import 'export_card_dialog.dart' show showExportCardDialog, showExportVariantCardDialog;
 import 'tags_screen.dart';
 
 class CharacterDetailScreen extends StatefulWidget {
@@ -253,11 +254,25 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                   onSelected: (value) async {
                     if (value == 'bundle') {
                       await showExportBundleDialog(context, c);
+                    } else if (value == 'card') {
+                      await showExportCardDialog(context, c);
                     } else if (value == 'file') {
                       await _exportFile();
                     }
                   },
                   itemBuilder: (_) => [
+                    PopupMenuItem<String>(
+                      value: 'card',
+                      child: Row(
+                        children: [
+                          Icon(Icons.image_outlined,
+                              size: 15, color: AppTheme.textSecondary),
+                          SizedBox(width: 8),
+                          Text('Export as card image (.png)',
+                              style: TextStyle(fontSize: 13)),
+                        ],
+                      ),
+                    ),
                     PopupMenuItem<String>(
                       value: 'bundle',
                       child: Row(
@@ -2249,6 +2264,8 @@ class _VariantCard extends StatelessWidget {
         await _apply(context);
       case _VariantAction.unapply:
         await _unapply(context);
+      case _VariantAction.exportCard:
+        await showExportVariantCardDialog(context, character, variant);
       case _VariantAction.exportBundle:
         await _exportBundle(context);
       case _VariantAction.delete:
@@ -2311,6 +2328,10 @@ class _VariantCard extends StatelessWidget {
             child: _MenuRow(Icons.eject_rounded, 'Unapply'),
           ),
         const PopupMenuDivider(),
+        const PopupMenuItem(
+          value: _VariantAction.exportCard,
+          child: _MenuRow(Icons.image_outlined, 'Export as card image'),
+        ),
         const PopupMenuItem(
           value: _VariantAction.exportBundle,
           child: _MenuRow(Icons.file_upload_outlined, 'Export as bundle'),
@@ -2448,6 +2469,7 @@ enum _VariantAction {
   setMain,
   apply,
   unapply,
+  exportCard,
   exportBundle,
   delete,
 }

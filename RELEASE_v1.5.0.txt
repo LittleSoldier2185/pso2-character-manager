@@ -1,0 +1,61 @@
+PSO2 Character Manager v1.5.0
+Albums (major), recycle bin, list view & more
+
+ALBUMS — MAJOR UPDATE
+
+• Albums — group gallery images into named, ordered collections. Each
+  album has a detail page with cover, characters, and metadata; a
+  full-screen reader with horizontal, vertical, and book-spread modes;
+  zoom up to 5×; manage mode with drag-to-reorder list and grid views;
+  and export to ZIP or PDF.
+
+• Album Tags — a separate tag system for albums, independent from
+  character tags. Managed in a dedicated screen with colour picker,
+  usage stats, sort options, and a filter popover in the Albums toolbar.
+
+NEW FEATURES
+
+• Recycle bin — deleting a character moves it to a recycle bin instead
+  of permanently removing it. Items are auto-purged after 7 days. Restore
+  or permanently delete from the Recycle Bin sidebar entry.
+
+• Compact list view — a dense single-column list mode on the home screen
+  showing thumbnail, tier badge, name, race/gender, and last modified date.
+
+• Last modified date — every character tracks when it was last edited.
+  A new "Last modified" sort option is available across all screens.
+
+• Bulk actions — long-press any character card to enter selection mode,
+  then move to recycle bin, add to a collection, or manage tags across
+  all selected characters at once.
+
+• Apply history — every apply and unapply is recorded. Browse the last
+  100 events in Settings → About → Apply history.
+
+• Library backup — export your entire library to a dated zip file from
+  Settings → Storage → Backup library.
+
+• Find duplicates — scan for characters with identical files from
+  Settings → Storage → Find duplicates.
+
+• Gallery captions — attach short notes to gallery images, visible in
+  the info panel and fullscreen viewer, and searchable.
+
+CHARACTER CARD EXPORT
+
+• Export as card image — export any character as a PNG card with all
+  character data embedded. Import it on any machine with PSO2 Character
+  Manager using the download button on the home screen.
+
+• Import from card — import a character directly from a card PNG,
+  creating any missing tags automatically.
+
+BUG FIXES
+
+• Random spinner — whitelisting a specific variant now correctly restricts
+  the spin pool to only that variant instead of including all other
+  characters' main variants.
+
+• Auto-updater — installer now waits 3 seconds after the app closes
+  before copying files, preventing occasional "file in use" errors on
+  Windows DLLs.

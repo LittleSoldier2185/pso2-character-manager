@@ -13,6 +13,8 @@ import 'screens/collections_screen.dart';
 import 'screens/applied_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/add_character_screen.dart';
+import 'screens/albums_screen.dart';
+import 'screens/album_tags_screen.dart';
 import 'screens/gallery_screen.dart';
 import 'screens/import_bundle_dialog.dart';
 import 'screens/migration_screen.dart';
@@ -250,9 +252,11 @@ class _MainShellState extends State<MainShell> {
                           CollectionsScreen(),
                           AppliedScreen(),
                           GalleryScreen(),
+                          AlbumsScreen(),
                           TagsScreen(),
                           ScanScreen(),
                           RecycleBinScreen(),
+                          AlbumTagsScreen(),
                         ],
                       ),
                     ),
@@ -476,28 +480,55 @@ class _SidebarState extends State<_Sidebar> {
                     collapsed: narrow,
                   ),
                   _NavItem(
+                    icon: Icons.photo_album_outlined,
+                    label: 'Albums',
+                    badge: provider.allAlbums.isNotEmpty
+                        ? '${provider.allAlbums.length}'
+                        : null,
+                    selected: widget.currentIndex == 4 || widget.currentIndex == 8,
+                    onTap: () => widget.onSelect(4),
+                    collapsed: narrow,
+                  ),
+                  if (!narrow && (widget.currentIndex == 4 || widget.currentIndex == 8)) ...[
+                    _SubNavItem(
+                      label: 'All Albums',
+                      icon: Icons.photo_album_outlined,
+                      selected: widget.currentIndex == 4,
+                      onTap: () => widget.onSelect(4),
+                    ),
+                    _SubNavItem(
+                      label: 'Album Tags',
+                      icon: Icons.label_rounded,
+                      selected: widget.currentIndex == 8,
+                      onTap: () => widget.onSelect(8),
+                      badge: provider.allAlbumTags.isNotEmpty
+                          ? '${provider.allAlbumTags.length}'
+                          : null,
+                    ),
+                  ],
+                  _NavItem(
                     icon: Icons.label_rounded,
                     label: 'Tags',
                     badge: provider.allTags.isNotEmpty
                         ? '${provider.allTags.length}'
                         : null,
-                    selected: widget.currentIndex == 4,
-                    onTap: () => widget.onSelect(4),
+                    selected: widget.currentIndex == 5,
+                    onTap: () => widget.onSelect(5),
                     collapsed: narrow,
                   ),
                   _NavItem(
                     icon: Icons.radar_rounded,
                     label: 'Scan folder',
-                    selected: widget.currentIndex == 5,
-                    onTap: () => widget.onSelect(5),
+                    selected: widget.currentIndex == 6,
+                    onTap: () => widget.onSelect(6),
                     collapsed: narrow,
                   ),
                   _NavItem(
                     icon: Icons.delete_outline_rounded,
                     label: 'Recycle Bin',
                     badge: provider.trashCount > 0 ? '${provider.trashCount}' : null,
-                    selected: widget.currentIndex == 6,
-                    onTap: () => widget.onSelect(6),
+                    selected: widget.currentIndex == 7,
+                    onTap: () => widget.onSelect(7),
                     collapsed: narrow,
                   ),
                   _UpdatesNavItem(
@@ -828,6 +859,92 @@ class _NavItem extends StatelessWidget {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Sub nav item (indented child under a parent nav item) ─────────
+
+class _SubNavItem extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+  final String? badge;
+
+  const _SubNavItem({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+    this.badge,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Row(
+        children: [
+          // Accent bar — visible only when selected
+          Container(
+            width: 2,
+            height: 28,
+            margin: const EdgeInsets.only(left: 16),
+            decoration: BoxDecoration(
+              color: selected ? AppTheme.accent : Colors.transparent,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.only(left: 6, right: 4, top: 1, bottom: 1),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+              decoration: BoxDecoration(
+                color: selected
+                    ? AppTheme.accent.withValues(alpha: 0.08)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Row(
+                children: [
+                  Icon(icon,
+                      size: 13,
+                      color: selected ? AppTheme.accent : AppTheme.textSecondary),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        color: selected ? AppTheme.accent : AppTheme.textSecondary,
+                        fontSize: 12,
+                        fontWeight: selected ? FontWeight.w500 : FontWeight.normal,
+                      ),
+                    ),
+                  ),
+                  if (badge != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? AppTheme.accent.withValues(alpha: 0.2)
+                            : AppTheme.bgSurface,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        badge!,
+                        style: TextStyle(
+                          color: selected ? AppTheme.accent : AppTheme.textSecondary,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

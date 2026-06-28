@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:pasteboard/pasteboard.dart';
 import 'package:provider/provider.dart';
+import '../models/album_data.dart';
 import '../models/gallery_data.dart';
 import '../models/character_data.dart';
 import '../providers/character_provider.dart';
@@ -96,7 +97,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
           final q = _search.toLowerCase();
           items = items.where((i) {
             final char = _charForItem(i, characters);
-            return char?.name.toLowerCase().contains(q) ?? false;
+            return (char?.name.toLowerCase().contains(q) ?? false)
+                || (i.caption?.toLowerCase().contains(q) ?? false);
           }).toList();
         }
 
@@ -424,7 +426,7 @@ class _FilterChip extends StatelessWidget {
 
 // ── Gallery grid cell ──────────────────────────────────────────────
 
-enum _GalleryCtxAction { copy, setThumbnail }
+enum _GalleryCtxAction { copy, editCaption, addToAlbum }
 
 class _GalleryGridCell extends StatefulWidget {
   final GalleryItemData item;
@@ -469,20 +471,6 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
     } catch (_) {}
   }
 
-  Future<void> _setAsThumbnail() async {
-    if (widget.character == null) return;
-    try {
-      await context.read<CharacterProvider>().updateCharacterThumbnail(
-          widget.character!, widget.item.filePath(widget.character!.folderPath));
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Thumbnail updated'),
-          duration: Duration(seconds: 2),
-        ));
-      }
-    } catch (_) {}
-  }
-
   void _showContextMenu(BuildContext ctx, Offset pos) async {
     final size = MediaQuery.of(ctx).size;
     final result = await showMenu<_GalleryCtxAction>(
@@ -499,21 +487,81 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
           value: _GalleryCtxAction.copy,
           child: _menuRow(Icons.copy_rounded, 'Copy to clipboard'),
         ),
-        if (widget.character != null)
-          PopupMenuItem(
-            value: _GalleryCtxAction.setThumbnail,
-            child: _menuRow(Icons.portrait_rounded, 'Set as thumbnail'),
+        PopupMenuItem(
+          value: _GalleryCtxAction.editCaption,
+          child: _menuRow(
+            Icons.edit_note_rounded,
+            (widget.item.caption?.isNotEmpty ?? false) ? 'Edit caption' : 'Add caption',
           ),
+        ),
+        PopupMenuItem(
+          value: _GalleryCtxAction.addToAlbum,
+          child: _menuRow(Icons.photo_album_outlined, 'Add to album'),
+        ),
       ],
     );
     if (!mounted) return;
     switch (result) {
       case _GalleryCtxAction.copy:
         await _copyToClipboard();
-      case _GalleryCtxAction.setThumbnail:
-        await _setAsThumbnail();
+      case _GalleryCtxAction.editCaption:
+        await _editCaption();
+      case _GalleryCtxAction.addToAlbum:
+        await _addToAlbum();
       case null:
         break;
+    }
+  }
+
+  Future<void> _addToAlbum() async {
+    if (!mounted) return;
+    final albums = context.read<CharacterProvider>().allAlbums;
+    await showDialog(
+      context: context,
+      builder: (_) => _AddToAlbumDialog(itemId: widget.item.id, albums: albums),
+    );
+  }
+
+  Future<void> _editCaption() async {
+    final ctrl = TextEditingController(text: widget.item.caption ?? '');
+    final hasCaption = widget.item.caption?.isNotEmpty ?? false;
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: Text(hasCaption ? 'Edit caption' : 'Add caption',
+            style: const TextStyle(fontSize: 15)),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          maxLength: 200,
+          maxLines: 3,
+          minLines: 1,
+          decoration: const InputDecoration(hintText: 'Caption…', counterText: ''),
+          style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+          onSubmitted: (_) => Navigator.pop(ctx, ctrl.text),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          if (hasCaption)
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, ''),
+              child: Text('Clear', style: TextStyle(color: AppTheme.textSecondary)),
+            ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (result != null && mounted) {
+      await context.read<CharacterProvider>()
+          .updateGalleryItemCaption(widget.item, result.isEmpty ? null : result);
     }
   }
 
@@ -770,6 +818,19 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
                               fontSize: 9),
                         ),
                       ],
+                      // Caption — L and XL
+                      if (widget.infoLevel >= 2 && (widget.item.caption?.isNotEmpty ?? false)) ...[
+                        const SizedBox(height: 3),
+                        Text(
+                          widget.item.caption!,
+                          style: TextStyle(
+                              color: AppTheme.textSecondary,
+                              fontSize: 9,
+                              fontStyle: FontStyle.italic),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -807,6 +868,7 @@ class _FullscreenViewer extends StatefulWidget {
 class _FullscreenViewerState extends State<_FullscreenViewer> {
   late PageController _pageCtrl;
   late int _currentIndex;
+  final _revealedIds = <String>{};
 
   @override
   void initState() {
@@ -847,15 +909,38 @@ class _FullscreenViewerState extends State<_FullscreenViewer> {
               final char = widget.characters
                   .where((c) => c.id == item.characterId)
                   .firstOrNull;
-              return InteractiveViewer(
-                minScale: 0.5,
-                maxScale: 6,
-                child: Image.file(
-                  File(item.filePath(char?.folderPath ?? '')),
-                  fit: BoxFit.contain,
-                  gaplessPlayback: true,
-                ),
-              );
+              final path = item.filePath(char?.folderPath ?? '');
+              final blurStrict = context.read<CharacterProvider>().blurSensitiveInViews;
+              final needsReveal = blurStrict && item.isBlurred && !_revealedIds.contains(item.id);
+              return needsReveal
+                  ? GestureDetector(
+                      onTap: () => setState(() => _revealedIds.add(item.id)),
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          ImageFiltered(
+                            imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                            child: Image.file(File(path), fit: BoxFit.contain, gaplessPlayback: true),
+                          ),
+                          const Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.visibility_off_outlined, size: 48, color: Colors.white70),
+                                SizedBox(height: 10),
+                                Text('Click to reveal',
+                                    style: TextStyle(color: Colors.white54, fontSize: 14)),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  : InteractiveViewer(
+                      minScale: 0.5,
+                      maxScale: 6,
+                      child: Image.file(File(path), fit: BoxFit.contain, gaplessPlayback: true),
+                    );
             },
           ),
           // Close
@@ -891,6 +976,32 @@ class _FullscreenViewerState extends State<_FullscreenViewer> {
                   '${_currentIndex + 1} / ${widget.items.length}',
                   style: const TextStyle(
                       color: Colors.white, fontSize: 12),
+                ),
+              ),
+            ),
+          // Caption — above character badge
+          if (widget.items[_currentIndex].caption?.isNotEmpty ?? false)
+            Positioned(
+              bottom: char != null ? 52 : 12,
+              left: 24,
+              right: 24,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    widget.items[_currentIndex].caption!,
+                    style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontStyle: FontStyle.italic),
+                    textAlign: TextAlign.center,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
               ),
             ),
@@ -987,6 +1098,109 @@ class _FullscreenViewerState extends State<_FullscreenViewer> {
             ),
         ],
       ),
+    );
+  }
+}
+
+// ── Add-to-album dialog ────────────────────────────────────────────
+
+class _AddToAlbumDialog extends StatefulWidget {
+  final String itemId;
+  final List<AlbumData> albums;
+
+  const _AddToAlbumDialog({required this.itemId, required this.albums});
+
+  @override
+  State<_AddToAlbumDialog> createState() => _AddToAlbumDialogState();
+}
+
+class _AddToAlbumDialogState extends State<_AddToAlbumDialog> {
+  final _ctrl = TextEditingController();
+  bool _showNew = false;
+
+  @override
+  void dispose() { _ctrl.dispose(); super.dispose(); }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.read<CharacterProvider>();
+    return AlertDialog(
+      backgroundColor: AppTheme.bgCard,
+      title: const Text('Add to album', style: TextStyle(fontSize: 15)),
+      content: SizedBox(
+        width: 280,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (widget.albums.isEmpty && !_showNew)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text('No albums yet.',
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+              ),
+            ...widget.albums.map((album) {
+              final already = album.itemIds.contains(widget.itemId);
+              return ListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                leading: Icon(
+                  already ? Icons.check_circle_rounded : Icons.photo_album_outlined,
+                  size: 18,
+                  color: already ? AppTheme.accent : AppTheme.textSecondary,
+                ),
+                title: Text(album.name,
+                    style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
+                subtitle: Text(
+                  '${album.itemIds.length} image${album.itemIds.length == 1 ? '' : 's'}',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                ),
+                onTap: already ? null : () async {
+                  await provider.addItemToAlbum(album, widget.itemId);
+                  if (context.mounted) Navigator.pop(context);
+                },
+              );
+            }),
+            if (_showNew) ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _ctrl,
+                autofocus: true,
+                decoration: const InputDecoration(
+                    hintText: 'Album name…', isDense: true),
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                onSubmitted: (name) async {
+                  if (name.trim().isEmpty) return;
+                  final album = await provider.createAlbum(name.trim());
+                  await provider.addItemToAlbum(album, widget.itemId);
+                  if (context.mounted) Navigator.pop(context);
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        if (!_showNew)
+          TextButton(
+            onPressed: () => setState(() => _showNew = true),
+            child: const Text('New album'),
+          )
+        else
+          ElevatedButton(
+            onPressed: () async {
+              final name = _ctrl.text.trim();
+              if (name.isEmpty) return;
+              final album = await provider.createAlbum(name);
+              await provider.addItemToAlbum(album, widget.itemId);
+              if (context.mounted) Navigator.pop(context);
+            },
+            child: const Text('Create & add'),
+          ),
+      ],
     );
   }
 }

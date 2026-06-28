@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'services/app_update_service.dart';
 import 'theme/app_theme.dart';
 
 // ── Data ──────────────────────────────────────────────────────────
@@ -12,7 +11,75 @@ class _PatchEntry {
 }
 
 const _entries = [
-  _PatchEntry('1.5.0', 'Recycle bin, compact list view & last modified', '''
+  _PatchEntry('1.5.0', 'Albums (major), recycle bin, list view & more', '''
+ALBUMS — MAJOR UPDATE
+
+• Albums — a new "Albums" entry in the sidebar for grouping gallery images
+  into named, ordered collections. A single image can belong to multiple
+  albums. Albums are sorted by last modified date and can be renamed,
+  deleted, or have their tags edited from the right-click context menu.
+
+• Album detail page — opens when you click any album. Shows the cover image,
+  total image count, the characters featured, creation date, last edit date,
+  and assigned tags. A thumbnail strip at the bottom lets you jump to any
+  image directly — click a thumbnail to open the reader at that exact position
+  rather than always starting from the beginning.
+
+• Full-screen reader — three layout modes selectable from the toolbar:
+  — Horizontal — left-to-right page flip (default)
+  — Vertical — continuous top-to-bottom scroll
+  — Book spread — 2-page side-by-side layout, like a manga reader
+  Supports pinch-to-zoom up to 5× and free pan at any zoom level.
+  Keyboard arrow keys and scroll wheel also turn pages.
+  Auto-play mode cycles through pages automatically on a configurable
+  interval (1–10 seconds). Swipe gestures work in horizontal mode.
+
+• Album manage mode — a dedicated two-panel workspace:
+
+  Left panel — form with:
+    — Cover thumbnail preview (live, shows the first image in the album)
+    — Name text field
+    — Description — shown as a read-only preview; tap the Edit button to
+      open a large floating dialog for comfortable multi-line editing
+    — Tags — assigned tags shown as chips; tap "+ Tag" to open a floating
+      search-and-toggle picker to add or remove any album tag
+    — Characters — each character in the album listed with their avatar,
+      name, and image count
+    — Save and Cancel buttons pinned to the bottom of the panel
+
+  Right panel — image list with a list/grid toggle in the toolbar:
+    — List view — reorderable with a drag handle on each row; remove button
+      on the right
+    — Grid view — card thumbnails with order number and Cover badge; long-
+      press and drag any card to reorder; remove button on each card
+
+• Album Tags — a separate tag system exclusively for albums, completely
+  independent from character tags. Managed in the new "Album Tags" screen
+  reachable from a sub-navigation item under Albums in the sidebar.
+
+  The Album Tags screen shows:
+    — Stat cards: total tags, in-use count, unused count with a one-tap
+      "Delete all unused" button
+    — Tag cards: colour bar, tag chip preview, and usage count
+    — Sort options: name A–Z / Z–A, most / least used, newest / oldest
+    — Search bar to filter the tag list
+    — Create / edit dialog with a full colour picker and live preview
+
+  Clicking any tag in this screen jumps to the Albums screen
+  pre-filtered to show only albums that have that tag.
+
+• Tag filter — the Albums toolbar has a "Filter ▾" button that opens a
+  searchable popover listing all album tags. Toggle any tag to filter the
+  album grid. A numbered badge on the button shows how many filters are
+  active. Tap Filter again or click outside to close.
+
+• Tags on detail page — the album info panel now shows the album's assigned
+  tags alongside the other metadata (name, description, characters, dates).
+
+• Album export — export any album from the detail page as a ZIP archive
+  (one image file per entry) or a multi-page PDF (each image fills one page,
+  sized to fit). Accessible via the Export button in the detail view.
+
 NEW FEATURES
 
 • Recycle bin — deleting a character now moves it to a recycle bin instead
@@ -33,8 +100,11 @@ NEW FEATURES
   all screens that support sorting.
 
 • Bulk actions — long-press any character card to enter selection mode.
-  Tap additional cards to select them, then use the action bar to move all
-  selected characters to the recycle bin or add them to a collection at once.
+  Tap additional cards to select them, then use the action bar to:
+  — Move all selected characters to the recycle bin (library screen)
+  — Add them to a collection (library screen)
+  — Manage tags across all selected characters (library screen)
+  — Unapply multiple characters at once (applied screen)
 
 • Responsive dialogs — all dialogs and panels now shrink to fit smaller
   windows. Previously, dialogs had fixed widths and would overflow if the
@@ -43,22 +113,6 @@ NEW FEATURES
 • Random spinner filters now persist — whitelist, blacklist, and the
   "Include variants" toggle are remembered when you close and reopen the
   spinner within the same session. Filters reset when the app is closed.
-
-BUG FIXES
-
-• Random spinner — whitelisting a specific variant now correctly restricts
-  the spin pool to only that variant. Previously, all main variants from
-  other characters were still included alongside the whitelisted entry.
-  The "Include variants" toggle is now correctly ignored when exact variants
-  are whitelisted.
-
-• Auto-updater — the installer now waits 3 seconds after the app closes
-  before copying files. This prevents the occasional "file in use" error
-  on desktop_drop_plugin.dll and similar DLLs that Windows holds briefly
-  after a process exits. Robocopy retry limits are also tightened so that
-  if a lock does occur, the wait is 2 seconds instead of 30.
-
-NEW FEATURES (second batch)
 
 • Bulk tag management — with one or more characters selected, a new
   "Tags" button appears in the selection bar. Tap any tag once to mark
@@ -78,6 +132,76 @@ NEW FEATURES (second batch)
 • Find duplicates — Settings → Storage → Find duplicates scans every
   character file and groups any that share identical content. Results
   show the character names and race/gender for each duplicate group.
+
+• Gallery captions — right-click any image in the gallery and choose
+  "Add caption" to attach a short note to that image. Captions appear
+  in the info panel on Large and Extra large grid sizes, and as an
+  overlay in the fullscreen viewer. The gallery search bar now also
+  matches against captions.
+
+CHARACTER CARD EXPORT
+
+• Export as card image — each character can now be exported as a PNG
+  image card. Open a character, tap the share icon, and choose
+  "Export as card image". Individual variants also have this option
+  in their right-click menu.
+
+  The card shows the character's thumbnail, name, tier badge, race,
+  gender, and tags in a full-bleed layout.
+
+  The exported PNG has all character data embedded inside it —
+  name, race, gender, tier, tags, description, and the actual
+  character file. Anyone with PSO2 Character Manager can import it
+  directly using the download button on the home screen →
+  "Import from card image".
+
+• Import from card — the download button on the home screen now
+  offers two options: "Import from card image" and
+  "Import .pso2char bundle". Picking a card PNG extracts all
+  embedded data and creates a new character entry, including tags
+  (created automatically if they do not exist yet).
+
+HOW TO SHARE A CARD (IMPORTANT)
+
+  The card image carries embedded character data. Whether that data
+  survives sharing depends entirely on how you send the file.
+
+  Safe to share — these services send the original file untouched:
+    ✓ Google Drive
+    ✓ Dropbox
+    ✓ OneDrive
+    ✓ Email attachment
+    ✓ Direct file transfer (USB, LAN, etc.)
+
+  DATA WILL BE LOST on these platforms — they re-encode all images
+  and strip everything except the pixels:
+    ✗ Discord — re-encodes all image files including attachments
+    ✗ Twitter / X
+    ✗ WhatsApp
+    ✗ Facebook / Instagram / Threads
+    ✗ Imgur, Gyazo, Lightshot, or any image host
+
+  The card will still look correct as an image, but it can no longer
+  be imported.
+
+  To share on Discord with import data intact, zip the PNG first
+  and send the .zip file — Discord does not re-encode non-image
+  file types.
+
+BUG FIXES
+
+• Random spinner — whitelisting a specific variant now correctly restricts
+  the spin pool to only that variant. Previously, all main variants from
+  other characters were still included alongside the whitelisted entry.
+  The "Include variants" toggle is now correctly ignored when exact variants
+  are whitelisted.
+
+• Auto-updater — the installer now waits 3 seconds after the app closes
+  before copying files. This prevents the occasional "file in use" error
+  on desktop_drop_plugin.dll and similar DLLs that Windows holds briefly
+  after a process exits. Robocopy retry limits are also tightened so that
+  if a lock does occur, the wait is 2 seconds instead of 30.
+
 '''),
   _PatchEntry('1.4.4', 'QoL improvements', '''
 IMPROVEMENTS
@@ -390,6 +514,9 @@ NEW FEATURES
 
 // ── Body parser ───────────────────────────────────────────────────
 
+const _kGreen = Color(0xFF56D364);
+const _kRed   = Color(0xFFFF7B72);
+
 List<InlineSpan> _parseBody(String body, TextStyle base, TextStyle bold) {
   final spans = <InlineSpan>[];
   for (final line in body.split('\n')) {
@@ -401,6 +528,16 @@ List<InlineSpan> _parseBody(String body, TextStyle base, TextStyle bold) {
     // All-caps section headers (IMPROVEMENTS, BUG FIXES, MAJOR UPDATES…)
     if (trimmed == trimmed.toUpperCase() && trimmed.contains(RegExp(r'[A-Z]'))) {
       spans.add(TextSpan(text: '$line\n', style: bold));
+      continue;
+    }
+    // ✓ safe lines → green
+    if (trimmed.startsWith('✓')) {
+      spans.add(TextSpan(text: '$line\n', style: base.copyWith(color: _kGreen)));
+      continue;
+    }
+    // ✗ unsafe lines → red
+    if (trimmed.startsWith('✗')) {
+      spans.add(TextSpan(text: '$line\n', style: base.copyWith(color: _kRed)));
       continue;
     }
     // Bullet lines: bold up to the em-dash; rest is normal

@@ -53,7 +53,7 @@ class _SpinEntry {
 
 // ── Filter entry ───────────────────────────────────────────────────
 
-enum _FilterKind { name, race, gender, tag, tier, variant }
+enum _FilterKind { name, race, gender, tag, tier, variant, collection }
 
 class _FilterEntry {
   final String value;
@@ -72,9 +72,10 @@ class _FilterEntry {
     switch (kind) {
       case _FilterKind.race:    return AppTheme.raceColor(value);
       case _FilterKind.gender:  return AppTheme.accentGold;
-      case _FilterKind.tag:     return AppTheme.newmanColor;
-      case _FilterKind.name:    return AppTheme.accent;
-      case _FilterKind.variant: return AppTheme.accentGold;
+      case _FilterKind.tag:        return AppTheme.newmanColor;
+      case _FilterKind.name:       return AppTheme.accent;
+      case _FilterKind.variant:    return AppTheme.accentGold;
+      case _FilterKind.collection: return AppTheme.accent;
       case _FilterKind.tier:
         final t = CharacterTier.values.firstWhere(
             (t) => t.label == value,
@@ -258,6 +259,8 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
         final parts = filter.value.split(':');
         if (parts.length < 2) return false;
         return c.id == parts[0] && entry.variant.folderName == parts[1];
+      case _FilterKind.collection:
+        return c.collectionIds.contains(filter.value);
     }
   }
 
@@ -354,6 +357,12 @@ class _SpinnerDialogState extends State<_SpinnerDialog>
       final tag = widget.provider.tagById(tagId);
       if (tag != null && tag.name.toLowerCase().contains(q)) {
         results.add(_FilterEntry(tagId, _FilterKind.tag, label: tag.name));
+      }
+    }
+    // Collections
+    for (final col in widget.provider.allCollections) {
+      if (col.name.toLowerCase().contains(q)) {
+        results.add(_FilterEntry(col.id, _FilterKind.collection, label: col.name));
       }
     }
     // Character names

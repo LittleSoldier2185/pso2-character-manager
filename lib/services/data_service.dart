@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../models/character_data.dart';
 import '../models/collection_data.dart';
+import '../models/album_data.dart';
 import '../models/gallery_data.dart';
 import '../models/tag_data.dart';
 import '../widgets/tier_border.dart';
@@ -27,6 +28,7 @@ class AppSettings {
   String? sortOption;
   String? lastSeenVersion;
   String? tierEffectsJson;
+  bool blurSensitiveInViews;
 
   AppSettings({
     this.gameFolderPath,
@@ -43,6 +45,7 @@ class AppSettings {
     this.sortOption,
     this.lastSeenVersion,
     this.tierEffectsJson,
+    this.blurSensitiveInViews = true,
   });
 
   Color? get accentColorValue =>
@@ -63,6 +66,7 @@ class AppSettings {
     'sortOption': sortOption,
     'lastSeenVersion': lastSeenVersion,
     'tierEffectsJson': tierEffectsJson,
+    'blurSensitiveInViews': blurSensitiveInViews,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -80,6 +84,7 @@ class AppSettings {
     sortOption: j['sortOption'] as String?,
     lastSeenVersion: j['lastSeenVersion'] as String?,
     tierEffectsJson: j['tierEffectsJson'] as String?,
+    blurSensitiveInViews: (j['blurSensitiveInViews'] as bool?) ?? true,
   );
 }
 
@@ -133,7 +138,9 @@ class DataService {
   String get _settingsPath => p.join(_appRootPath, 'settings.json');
   String get _charactersPath => p.join(_dataRootPath, 'characters');
   String get _collectionsPath => p.join(_dataRootPath, 'collections.json');
-  String get _tagsPath => p.join(_dataRootPath, 'tags.json');
+  String get _tagsPath      => p.join(_dataRootPath, 'tags.json');
+  String get _albumTagsPath => p.join(_dataRootPath, 'album_tags.json');
+  String get _albumsPath    => p.join(_dataRootPath, 'albums.json');
   String get _recycleBinPath => p.join(_dataRootPath, 'recycle_bin');
   String get _recycleBinMetaPath => p.join(_recycleBinPath, 'meta.json');
 
@@ -275,6 +282,14 @@ class DataService {
   Future<void> savePersistFilter(bool v) async {
     final s = await getSettings();
     s.persistFilter = v;
+    await saveSettings(s);
+  }
+
+  Future<bool> getBlurSensitiveInViews() async =>
+      (await getSettings()).blurSensitiveInViews;
+  Future<void> saveBlurSensitiveInViews(bool v) async {
+    final s = await getSettings();
+    s.blurSensitiveInViews = v;
     await saveSettings(s);
   }
 
@@ -805,6 +820,40 @@ class DataService {
   Future<void> saveTags(List<TagData> tags) async {
     await File(_tagsPath).writeAsString(const JsonEncoder.withIndent('  ')
         .convert(tags.map((t) => t.toJson()).toList()));
+  }
+
+  Future<List<TagData>> getAllAlbumTags() async {
+    final file = File(_albumTagsPath);
+    if (!await file.exists()) return [];
+    try {
+      final list = jsonDecode(await file.readAsString()) as List;
+      return list.map((j) => TagData.fromJson(j as Map<String, dynamic>)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveAlbumTags(List<TagData> tags) async {
+    await File(_albumTagsPath).writeAsString(const JsonEncoder.withIndent('  ')
+        .convert(tags.map((t) => t.toJson()).toList()));
+  }
+
+  // ── Albums ────────────────────────────────────────────────────────
+
+  Future<List<AlbumData>> loadAlbums() async {
+    final file = File(_albumsPath);
+    if (!await file.exists()) return [];
+    try {
+      final list = jsonDecode(await file.readAsString()) as List;
+      return list.map((j) => AlbumData.fromJson(j as Map<String, dynamic>)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> saveAlbums(List<AlbumData> albums) async {
+    await File(_albumsPath).writeAsString(
+        jsonEncode(albums.map((a) => a.toJson()).toList()));
   }
 
   // ── Apply history ─────────────────────────────────────────────────

@@ -241,19 +241,6 @@ class CharacterCard extends StatelessWidget {
                                         fontSize: 10),
                                   ),
                                 ],
-                                // Description — XL only
-                                if (cardSize >= 3 &&
-                                    character.description.isNotEmpty) ...[
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    character.description,
-                                    style: TextStyle(
-                                        color: AppTheme.textSecondary,
-                                        fontSize: 10),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ],
                               ],
                             ),
                           ),

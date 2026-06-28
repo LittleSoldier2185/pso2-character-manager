@@ -285,6 +285,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // ── Library stats ─────────────────────────────────────────────
+
+  void _showStats(CharacterProvider provider) {
+    showDialog(
+      context: context,
+      builder: (_) => _StatsDialog(provider: provider),
+    );
+  }
+
   // ── Apply history ─────────────────────────────────────────────
 
   Future<void> _showApplyHistory() async {
@@ -681,6 +690,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           }).toList(),
         ),
         const SizedBox(height: 8),
+        _sectionHeader('Gallery & Albums'),
+        const SizedBox(height: 10),
+        _ToggleRow(
+          label: 'Blur sensitive images in viewer',
+          subtitle: 'Blurred images require a click to reveal in slide & album reader',
+          value: context.read<CharacterProvider>().blurSensitiveInViews,
+          onChanged: (v) {
+            context.read<CharacterProvider>().setBlurSensitiveInViews(v);
+            setState(() {});
+          },
+        ),
+        const SizedBox(height: 8),
       ];
 
   List<Widget> _cardsWidgets() => [
@@ -908,8 +929,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
         const SizedBox(height: 8),
       ];
 
-  List<Widget> _aboutWidgets() => [
+  List<Widget> _aboutWidgets() {
+    final provider = context.read<CharacterProvider>();
+    return [
         _sectionHeader('About'),
+        const SizedBox(height: 10),
+        _settingTile(
+          icon: Icons.bar_chart_rounded,
+          title: 'Library stats',
+          subtitle: 'Race, tier, and gender breakdown of your library',
+          trailing: OutlinedButton(
+            onPressed: () => _showStats(provider),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppTheme.textSecondary,
+              side: BorderSide(color: AppTheme.borderColor),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              textStyle: const TextStyle(fontSize: 12),
+            ),
+            child: const Text('View'),
+          ),
+        ),
         const SizedBox(height: 10),
         _settingTile(
           icon: Icons.history_rounded,
@@ -995,6 +1034,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 8),
       ];
+  }
 
   Widget _buildHeader(BuildContext context) {
     return Padding(
@@ -1074,6 +1114,55 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
     );
   }
+}
+
+class _ToggleRow extends StatelessWidget {
+  final String label;
+  final String subtitle;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _ToggleRow({
+    required this.label,
+    required this.subtitle,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.bgSurface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.borderColor),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label,
+                      style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 11)),
+                ],
+              ),
+            ),
+            Switch(
+              value: value,
+              onChanged: onChanged,
+              activeColor: AppTheme.accent,
+            ),
+          ],
+        ),
+      );
 }
 
 class _SidebarItem extends StatefulWidget {
@@ -1287,6 +1376,204 @@ class _ApplyHistoryDialog extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ── Stats dialog ─────────────────────────────────────────────────
+
+class _StatsDialog extends StatelessWidget {
+  final CharacterProvider provider;
+  const _StatsDialog({required this.provider});
+
+  @override
+  Widget build(BuildContext context) {
+    final chars = provider.allCharacters;
+    final total = chars.length;
+    if (total == 0) {
+      return AlertDialog(
+        backgroundColor: AppTheme.bgCard,
+        title: const Text('Library stats'),
+        content: Text('No characters yet.',
+            style: TextStyle(color: AppTheme.textSecondary)),
+        actions: [
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'))
+        ],
+      );
+    }
+
+    final races = ['Human', 'Newman', 'Deuman', 'CAST'];
+    final raceCounts = {for (final r in races) r: chars.where((c) => c.race == r).length};
+    final femaleCt     = chars.where((c) => c.gender == 'Female').length;
+    final maleCt       = chars.where((c) => c.gender == 'Male').length;
+    final appliedCt    = chars.where((c) => c.isApplied).length;
+    final totalVariants = chars.fold(0, (s, c) => s + (c.variants.length - 1));
+
+    final tierOrder = [null, ...CharacterTier.values];
+    final tierCounts = {
+      for (final t in tierOrder)
+        t: chars.where((c) => c.tier == t).length,
+    };
+
+    return Dialog(
+      backgroundColor: AppTheme.bgCard,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 480),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 14, 12),
+              child: Row(
+                children: [
+                  Icon(Icons.bar_chart_rounded, size: 16, color: AppTheme.accent),
+                  const SizedBox(width: 8),
+                  Text('Library stats',
+                      style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500)),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: Icon(Icons.close, size: 16, color: AppTheme.textSecondary),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: AppTheme.borderColor),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Summary row
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    _StatsChip(label: '$total characters', icon: Icons.group_rounded),
+                    _StatsChip(label: '$totalVariants variants', icon: Icons.layers_rounded),
+                    _StatsChip(label: '$appliedCt applied', icon: Icons.check_circle_outline_rounded),
+                    _StatsChip(label: '${provider.allTags.length} tags', icon: Icons.label_rounded),
+                    _StatsChip(label: '${provider.allCollections.length} collections', icon: Icons.folder_rounded),
+                  ]),
+                  const SizedBox(height: 20),
+
+                  // Race breakdown
+                  Text('Race', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 8),
+                  ...races.map((r) {
+                    final ct = raceCounts[r]!;
+                    final pct = ct / total;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(children: [
+                        SizedBox(width: 56, child: Text(r, style: TextStyle(color: AppTheme.textPrimary, fontSize: 12))),
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(3),
+                            child: LinearProgressIndicator(
+                              value: pct,
+                              minHeight: 7,
+                              backgroundColor: AppTheme.bgSurface,
+                              valueColor: AlwaysStoppedAnimation(AppTheme.raceColor(r)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        SizedBox(width: 24, child: Text('$ct', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11), textAlign: TextAlign.right)),
+                      ]),
+                    );
+                  }),
+
+                  const SizedBox(height: 16),
+
+                  // Gender breakdown
+                  Text('Gender', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    SizedBox(width: 56, child: Text('Female', style: TextStyle(color: AppTheme.textPrimary, fontSize: 12))),
+                    Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(3), child: LinearProgressIndicator(value: femaleCt / total, minHeight: 7, backgroundColor: AppTheme.bgSurface, valueColor: AlwaysStoppedAnimation(Colors.pinkAccent)))),
+                    const SizedBox(width: 8),
+                    SizedBox(width: 24, child: Text('$femaleCt', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11), textAlign: TextAlign.right)),
+                  ]),
+                  const SizedBox(height: 6),
+                  Row(children: [
+                    SizedBox(width: 56, child: Text('Male', style: TextStyle(color: AppTheme.textPrimary, fontSize: 12))),
+                    Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(3), child: LinearProgressIndicator(value: maleCt / total, minHeight: 7, backgroundColor: AppTheme.bgSurface, valueColor: AlwaysStoppedAnimation(Colors.blueAccent)))),
+                    const SizedBox(width: 8),
+                    SizedBox(width: 24, child: Text('$maleCt', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11), textAlign: TextAlign.right)),
+                  ]),
+
+                  const SizedBox(height: 16),
+
+                  // Tier breakdown
+                  Text('Tier', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 8),
+                  ...tierOrder.map((t) {
+                    final ct = tierCounts[t]!;
+                    if (ct == 0) return const SizedBox.shrink();
+                    final label = t?.label ?? '—';
+                    final color = t != null ? Color(t.colorValue) : AppTheme.textSecondary;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: Row(children: [
+                        SizedBox(width: 56, child: Text(label, style: TextStyle(color: color, fontSize: 12, fontWeight: FontWeight.w500))),
+                        Expanded(child: ClipRRect(borderRadius: BorderRadius.circular(3), child: LinearProgressIndicator(value: ct / total, minHeight: 7, backgroundColor: AppTheme.bgSurface, valueColor: AlwaysStoppedAnimation(color)))),
+                        const SizedBox(width: 8),
+                        SizedBox(width: 24, child: Text('$ct', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11), textAlign: TextAlign.right)),
+                      ]),
+                    );
+                  }),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: AppTheme.borderColor),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Close'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatsChip extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  const _StatsChip({required this.label, required this.icon});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: AppTheme.bgSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppTheme.borderColor),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: AppTheme.accent),
+          const SizedBox(width: 5),
+          Text(label, style: TextStyle(color: AppTheme.textPrimary, fontSize: 11)),
+        ],
       ),
     );
   }

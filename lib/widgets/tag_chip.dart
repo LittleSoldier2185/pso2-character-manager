@@ -9,6 +9,7 @@ class TagChip extends StatelessWidget {
   final String? label;
   final Color? color;
   final VoidCallback? onDeleted;
+  final bool selected;
 
   const TagChip({
     super.key,
@@ -16,6 +17,7 @@ class TagChip extends StatelessWidget {
     this.label,
     this.color,
     this.onDeleted,
+    this.selected = false,
   }) : assert(tag != null || label != null, 'Provide tag or label');
 
   @override
@@ -30,9 +32,9 @@ class TagChip extends StatelessWidget {
         deleteIcon:
             onDeleted != null ? const Icon(Icons.close, size: 14) : null,
         onDeleted: onDeleted,
-        backgroundColor: c.withOpacity(0.1),
-        side: BorderSide(color: c.withOpacity(0.6), width: 0.5),
-        labelStyle: TextStyle(color: c, fontSize: 11),
+        backgroundColor: selected ? c.withOpacity(0.25) : c.withOpacity(0.1),
+        side: BorderSide(color: selected ? c : c.withOpacity(0.6), width: selected ? 1.5 : 0.5),
+        labelStyle: TextStyle(color: c, fontSize: 11, fontWeight: selected ? FontWeight.w600 : FontWeight.normal),
         padding: const EdgeInsets.symmetric(horizontal: 4),
         materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
       ),

@@ -5,9 +5,12 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import '../models/character_data.dart';
+import '../models/album_data.dart';
 import '../models/collection_data.dart';
 import '../models/gallery_data.dart';
 import '../models/tag_data.dart';
+import '../services/card_service.dart';
+import '../theme/app_theme.dart';
 import '../services/data_service.dart';
 import '../services/share_service.dart';
 
@@ -108,7 +111,13 @@ class CharacterProvider extends ChangeNotifier {
   List<CharacterData>   _characters   = [];
   List<CollectionData>  _collections  = [];
   List<TagData>         _tags         = [];
+  List<TagData>         _albumTags    = [];
+  List<AlbumData>       _albums       = [];
+  final Set<String>     _albumTagFilter = {};
   List<({CharacterData character, DateTime deletedAt})> _trashItems = [];
+
+  // characterId → most recent apply timestamp
+  Map<String, DateTime> _lastAppliedAt = {};
 
   // characterId → gallery items (in-memory cache)
   final Map<String, List<GalleryItemData>> _galleryCache = {};
@@ -132,6 +141,7 @@ class CharacterProvider extends ChangeNotifier {
   List<FilterPreset> _savedPresets = [];
   bool _matchAll       = true;
   bool _persistFilter  = false;
+  bool _blurSensitiveInViews = true;
 
   String? _gameFolderPath;
   String? _saveLocation;
@@ -145,6 +155,9 @@ class CharacterProvider extends ChangeNotifier {
   List<CharacterData>  get allCharacters  => _sortedCharacters(_characters);
   List<CollectionData> get allCollections => _collections;
   List<TagData>        get allTags        => _tags;
+  List<TagData>        get allAlbumTags   => _albumTags;
+  List<AlbumData>      get allAlbums      => _albums;
+  Set<String>          get albumTagFilter => _albumTagFilter;
 
   TagData? tagById(String id) {
     try { return _tags.firstWhere((t) => t.id == id); } catch (_) { return null; }
@@ -163,11 +176,14 @@ class CharacterProvider extends ChangeNotifier {
   List<FilterPreset> get savedPresets   => _savedPresets;
   bool         get persistFilter        => _persistFilter;
   bool         get matchAll             => _matchAll;
+  bool         get blurSensitiveInViews => _blurSensitiveInViews;
   String?      get gameFolderPath       => _gameFolderPath;
   String?      get saveLocation         => _saveLocation;
 
   List<({CharacterData character, DateTime deletedAt})> get trashItems => _trashItems;
   int get trashCount => _trashItems.length;
+
+  DateTime? lastAppliedAt(String charId) => _lastAppliedAt[charId];
 
   Map<String, DateTime> getVariantUpdateTimes(String characterId) =>
       _pendingUpdates[characterId] ?? {};
@@ -299,6 +315,7 @@ class CharacterProvider extends ChangeNotifier {
     _gameFolderPath = settings.gameFolderPath;
     _saveLocation   = settings.saveLocation;
     _persistFilter  = settings.persistFilter;
+    _blurSensitiveInViews = settings.blurSensitiveInViews;
     if (settings.sortOption != null) {
       _sortOption = SortOption.values.byName(settings.sortOption!);
     }
@@ -307,7 +324,20 @@ class CharacterProvider extends ChangeNotifier {
     _characters  = await _data.getAllCharacters();
     _collections = await _data.getAllCollections();
     _tags        = await _data.getAllTags();
+    _albumTags   = await _data.getAllAlbumTags();
+    _albums      = await _data.loadAlbums();
     _trashItems  = await _data.listTrash();
+
+    final history = await _data.getApplyHistory();
+    _lastAppliedAt = {};
+    for (final e in history) {
+      if (e['action'] == 'apply') {
+        final charId = e['characterId'] as String;
+        if (!_lastAppliedAt.containsKey(charId)) {
+          _lastAppliedAt[charId] = DateTime.parse(e['at'] as String);
+        }
+      }
+    }
 
     // Pre-load gallery cache
     for (final c in _characters) {
@@ -418,6 +448,9 @@ class CharacterProvider extends ChangeNotifier {
 
     character.mainVariantData!.originalFileName = p.basename(newSourcePath);
     character.mainVariantData!.lastSyncedAt = DateTime.now();
+    final rg = CharacterData.detectRaceGender(newSourcePath);
+    character.race   = rg['race']!;
+    character.gender = rg['gender']!;
     _pendingUpdates.remove(character.id);
     await _data.saveCharacter(character);
     notifyListeners();
@@ -705,6 +738,7 @@ class CharacterProvider extends ChangeNotifier {
       variantFolderName: variantFolderName,
       isApply: true,
     );
+    _lastAppliedAt[character.id] = DateTime.now();
     notifyListeners();
     return null;
   }
@@ -969,6 +1003,10 @@ class CharacterProvider extends ChangeNotifier {
       await _data.deleteGalleryItem(character: character, item: item);
       _galleryCache[item.characterId] =
           await _data.getGalleryItems(character);
+      for (final album in _albums) {
+        album.itemIds.remove(item.id);
+      }
+      await _data.saveAlbums(_albums);
       notifyListeners();
     } catch (_) {}
   }
@@ -981,6 +1019,69 @@ class CharacterProvider extends ChangeNotifier {
       await _data.saveGalleryItems(character, _galleryCache[item.characterId]!);
       notifyListeners();
     } catch (_) {}
+  }
+
+  Future<void> updateGalleryItemCaption(GalleryItemData item, String? caption) async {
+    try {
+      final character =
+          _characters.firstWhere((c) => c.id == item.characterId);
+      item.caption = caption;
+      await _data.saveGalleryItems(character, _galleryCache[item.characterId]!);
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  // ── Albums ────────────────────────────────────────────────────────
+
+  Future<AlbumData> createAlbum(String name) async {
+    final album = AlbumData(name: name);
+    _albums.add(album);
+    await _data.saveAlbums(_albums);
+    notifyListeners();
+    return album;
+  }
+
+  Future<void> renameAlbum(AlbumData album, String name) async {
+    album.name = name;
+    album.updatedAt = DateTime.now();
+    await _data.saveAlbums(_albums);
+    notifyListeners();
+  }
+
+  Future<void> updateAlbumDescription(AlbumData album, String description) async {
+    album.description = description;
+    album.updatedAt = DateTime.now();
+    await _data.saveAlbums(_albums);
+    notifyListeners();
+  }
+
+  Future<void> deleteAlbum(AlbumData album) async {
+    _albums.remove(album);
+    await _data.saveAlbums(_albums);
+    notifyListeners();
+  }
+
+  Future<void> addItemToAlbum(AlbumData album, String itemId) async {
+    if (album.itemIds.contains(itemId)) return;
+    album.itemIds.add(itemId);
+    album.updatedAt = DateTime.now();
+    await _data.saveAlbums(_albums);
+    notifyListeners();
+  }
+
+  Future<void> removeItemFromAlbum(AlbumData album, String itemId) async {
+    album.itemIds.remove(itemId);
+    album.updatedAt = DateTime.now();
+    await _data.saveAlbums(_albums);
+    notifyListeners();
+  }
+
+  Future<void> reorderAlbumItems(AlbumData album, int oldIndex, int newIndex) async {
+    final item = album.itemIds.removeAt(oldIndex);
+    album.itemIds.insert(newIndex, item);
+    album.updatedAt = DateTime.now();
+    await _data.saveAlbums(_albums);
+    notifyListeners();
   }
 
   // ── Tags ──────────────────────────────────────────────────────────
@@ -1019,6 +1120,64 @@ class CharacterProvider extends ChangeNotifier {
 
   int tagUsageCount(String tagId) =>
       _characters.where((c) => c.tags.contains(tagId)).length;
+
+  // ── Album Tags ────────────────────────────────────────────────────
+
+  Future<TagData> createAlbumTag(String name, Color color) async {
+    final tag = TagData(
+      id: _uuid.v4(),
+      name: name.trim(),
+      colorValue: color.toARGB32(),
+    );
+    _albumTags.add(tag);
+    await _data.saveAlbumTags(_albumTags);
+    notifyListeners();
+    return tag;
+  }
+
+  Future<void> updateAlbumTag(TagData tag, {String? name, Color? color}) async {
+    if (name != null) tag.name = name.trim();
+    if (color != null) tag.colorValue = color.toARGB32();
+    await _data.saveAlbumTags(_albumTags);
+    notifyListeners();
+  }
+
+  Future<void> deleteAlbumTag(TagData tag) async {
+    _albumTags.removeWhere((t) => t.id == tag.id);
+    _albumTagFilter.remove(tag.id);
+    for (final a in _albums) {
+      if (a.tagIds.contains(tag.id)) {
+        a.setTagIds(a.tagIds.where((id) => id != tag.id).toList());
+      }
+    }
+    await _data.saveAlbumTags(_albumTags);
+    await _data.saveAlbums(_albums);
+    notifyListeners();
+  }
+
+  int albumTagUsageCount(String tagId) =>
+      _albums.where((a) => a.tagIds.contains(tagId)).length;
+
+  Future<void> setAlbumTags(AlbumData album, List<String> tagIds) async {
+    album.setTagIds(List.from(tagIds));
+    album.updatedAt = DateTime.now();
+    await _data.saveAlbums(_albums);
+    notifyListeners();
+  }
+
+  void toggleAlbumTagFilter(String tagId) {
+    if (_albumTagFilter.contains(tagId)) {
+      _albumTagFilter.remove(tagId);
+    } else {
+      _albumTagFilter.add(tagId);
+    }
+    notifyListeners();
+  }
+
+  void clearAlbumTagFilter() {
+    _albumTagFilter.clear();
+    notifyListeners();
+  }
 
   // ── Share / Export ────────────────────────────────────────────────
 
@@ -1120,6 +1279,104 @@ class CharacterProvider extends ChangeNotifier {
 
       _characters.add(character);
       _galleryCache[character.id] = galleryItems;
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return 'Import failed: $e';
+    }
+  }
+
+  /// Imports a character from a card image payload (PNG with embedded data).
+  Future<String?> importCard({
+    required CardPayload payload,
+    required String characterName,
+  }) async {
+    try {
+      final id = _uuid.v4();
+      final raceGender = CharacterData.detectRaceGender(payload.originalFileName);
+      final variantName = _sanitize(characterName);
+
+      // Resolve or create tags from the card's tag names
+      final tagIds = <String>[];
+      for (int i = 0; i < payload.tagNames.length; i++) {
+        final name = payload.tagNames[i];
+        final color = i < payload.tagColors.length
+            ? Color(payload.tagColors[i])
+            : AppTheme.accent;
+        final existing = _tags.where(
+            (t) => t.name.toLowerCase() == name.toLowerCase()).firstOrNull;
+        if (existing != null) {
+          tagIds.add(existing.id);
+        } else {
+          final tag = await createTag(name, color);
+          tagIds.add(tag.id);
+        }
+      }
+
+      final character = await _data.createCharacterFolder(
+        id: id,
+        name: characterName,
+        race: raceGender['race']!,
+        gender: raceGender['gender']!,
+        variantFolderName: variantName,
+        variantDisplayName: characterName,
+        originalFileName: payload.originalFileName,
+        description: payload.description,
+        tags: tagIds,
+      );
+      character.tierIndex = payload.tierIndex;
+
+      // Write .fhp bytes directly
+      final variantFolder = p.join(character.folderPath, variantName);
+      await Directory(variantFolder).create(recursive: true);
+      await File(p.join(variantFolder, payload.originalFileName))
+          .writeAsBytes(payload.fhpBytes);
+
+      // Write thumbnail bytes if present
+      if (payload.thumbnailBytes != null) {
+        final ext = payload.thumbnailExt ?? 'png';
+        await File(p.join(variantFolder, '${variantName}_Thumbnail.$ext'))
+            .writeAsBytes(payload.thumbnailBytes!);
+      }
+
+      character.mainVariantData!.lastSyncedAt = DateTime.now();
+      await _data.saveCharacter(character);
+
+      _characters.add(character);
+      _galleryCache[character.id] = [];
+      notifyListeners();
+      return null;
+    } catch (e) {
+      return 'Import failed: $e';
+    }
+  }
+
+  Future<String?> importCardAsVariant({
+    required CardPayload payload,
+    required CharacterData character,
+    required String variantName,
+  }) async {
+    try {
+      final folderName = _sanitize(variantName);
+      final variantFolderPath = p.join(character.folderPath, folderName);
+      await Directory(variantFolderPath).create(recursive: true);
+
+      await File(p.join(variantFolderPath, payload.originalFileName))
+          .writeAsBytes(payload.fhpBytes);
+
+      if (payload.thumbnailBytes != null) {
+        final ext = payload.thumbnailExt ?? 'png';
+        await File(p.join(variantFolderPath, '${folderName}_Thumbnail.$ext'))
+            .writeAsBytes(payload.thumbnailBytes!);
+      }
+
+      await _data.addVariant(
+        character: character,
+        folderName: folderName,
+        displayName: variantName,
+        originalFileName: payload.originalFileName,
+      );
+
       notifyListeners();
       return null;
     } catch (e) {
@@ -1430,6 +1687,12 @@ class CharacterProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> setBlurSensitiveInViews(bool value) async {
+    _blurSensitiveInViews = value;
+    await _data.saveBlurSensitiveInViews(value);
+    notifyListeners();
+  }
+
   void _persistCurrentFilter() {
     final state = {
       'query': _searchQuery,
@@ -1548,6 +1811,11 @@ class CharacterProvider extends ChangeNotifier {
     try {
       await File(currentFile).rename(newPath);
       variant.originalFileName = newName;
+      if (variant.folderName == character.mainVariant) {
+        final rg = CharacterData.detectRaceGender(newName);
+        character.race   = rg['race']!;
+        character.gender = rg['gender']!;
+      }
       await _data.saveCharacter(character);
       notifyListeners();
       return null;
