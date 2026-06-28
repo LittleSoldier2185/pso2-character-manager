@@ -1,3 +1,6 @@
+# ── Claude Code (local AI tooling, not source code) ──────────────
+.claude/
+
 # ── Miscellaneous ────────────────────────────────────────────────
 *.class
 *.log
