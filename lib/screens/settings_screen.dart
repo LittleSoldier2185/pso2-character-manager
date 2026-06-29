@@ -397,10 +397,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   static const _cats = [
-    (label: 'Appearance', icon: Icons.palette_outlined),
-    (label: 'Cards',      icon: Icons.style_outlined),
-    (label: 'Storage',    icon: Icons.folder_outlined),
-    (label: 'About',      icon: Icons.info_outline_rounded),
+    (label: 'Appearance',     icon: Icons.palette_outlined),
+    (label: 'Cards',          icon: Icons.style_outlined),
+    (label: 'Storage',        icon: Icons.folder_outlined),
+    (label: 'Gallery',          icon: Icons.photo_library_outlined),
+    (label: 'About',          icon: Icons.info_outline_rounded),
   ];
 
   Widget _buildPanel(BuildContext context, CharacterProvider provider) {
@@ -472,6 +473,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       0 => _appearanceWidgets(),
       1 => _cardsWidgets(),
       2 => _storageWidgets(provider),
+      3 => _galleryAlbumsWidgets(provider),
       _ => _aboutWidgets(),
     };
     return ListView(
@@ -690,19 +692,185 @@ class _SettingsScreenState extends State<SettingsScreen> {
           }).toList(),
         ),
         const SizedBox(height: 8),
-        _sectionHeader('Gallery & Albums'),
-        const SizedBox(height: 10),
-        _ToggleRow(
-          label: 'Blur sensitive images in viewer',
-          subtitle: 'Blurred images require a click to reveal in slide & album reader',
-          value: context.read<CharacterProvider>().blurSensitiveInViews,
-          onChanged: (v) {
-            context.read<CharacterProvider>().setBlurSensitiveInViews(v);
-            setState(() {});
-          },
-        ),
-        const SizedBox(height: 8),
       ];
+
+  List<Widget> _galleryAlbumsWidgets(CharacterProvider provider) {
+    final layout = provider.defaultReaderLayout;
+    return [
+      _sectionHeader('Gallery'),
+      const SizedBox(height: 10),
+      _ToggleRow(
+        label: 'Blur sensitive images in viewer',
+        subtitle: 'Blurred images require a click to reveal in the gallery and album reader',
+        value: provider.blurSensitiveInViews,
+        onChanged: (v) {
+          provider.setBlurSensitiveInViews(v);
+          setState(() {});
+        },
+      ),
+      const SizedBox(height: 20),
+      _sectionHeader('Albums'),
+      const SizedBox(height: 10),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.bgSurface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.borderColor),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Card style',
+                style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500)),
+            const SizedBox(height: 2),
+            Text('Visual style for album cards in the grid',
+                style:
+                    TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                for (final opt in [
+                  (value: 'default',  icon: Icons.grid_view_rounded,    label: 'Default'),
+                  (value: 'book',     icon: Icons.menu_book_rounded,     label: 'Book'),
+                  (value: 'polaroid', icon: Icons.photo_rounded,         label: 'Polaroid'),
+                  (value: 'magazine', icon: Icons.newspaper_rounded,     label: 'Magazine'),
+                ]) ...[
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        provider.setAlbumCardStyle(opt.value);
+                        setState(() {});
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        padding: const EdgeInsets.symmetric(
+                            vertical: 8, horizontal: 4),
+                        decoration: BoxDecoration(
+                          color: provider.albumCardStyle == opt.value
+                              ? AppTheme.accent.withValues(alpha: 0.15)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: provider.albumCardStyle == opt.value
+                                ? AppTheme.accent.withValues(alpha: 0.6)
+                                : AppTheme.borderColor,
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(opt.icon,
+                                size: 18,
+                                color: provider.albumCardStyle == opt.value
+                                    ? AppTheme.accent
+                                    : AppTheme.textSecondary),
+                            const SizedBox(height: 4),
+                            Text(opt.label,
+                                style: TextStyle(
+                                    fontSize: 10,
+                                    color: provider.albumCardStyle == opt.value
+                                        ? AppTheme.accent
+                                        : AppTheme.textSecondary)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  if (opt.value != 'magazine') const SizedBox(width: 6),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 10),
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.bgSurface,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppTheme.borderColor),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Default reader layout',
+                      style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text('Layout mode used when opening an album',
+                      style: TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 11)),
+                ],
+              ),
+            ),
+            const SizedBox(width: 12),
+            Row(
+              children: [
+                for (final opt in [
+                  (value: 'horizontal', icon: Icons.swap_horiz_rounded,   label: 'Horizontal'),
+                  (value: 'vertical',   icon: Icons.swap_vert_rounded,     label: 'Vertical'),
+                  (value: 'book',       icon: Icons.menu_book_rounded,     label: 'Book'),
+                ])
+                  Tooltip(
+                    message: opt.label,
+                    child: GestureDetector(
+                      onTap: () {
+                        provider.setDefaultReaderLayout(opt.value);
+                        setState(() {});
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 150),
+                        margin: const EdgeInsets.only(left: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: layout == opt.value
+                              ? AppTheme.accent.withValues(alpha: 0.15)
+                              : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: layout == opt.value
+                                ? AppTheme.accent.withValues(alpha: 0.6)
+                                : AppTheme.borderColor,
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(opt.icon,
+                                size: 15,
+                                color: layout == opt.value
+                                    ? AppTheme.accent
+                                    : AppTheme.textSecondary),
+                            const SizedBox(width: 5),
+                            Text(opt.label,
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    color: layout == opt.value
+                                        ? AppTheme.accent
+                                        : AppTheme.textSecondary)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: 8),
+    ];
+  }
 
   List<Widget> _cardsWidgets() => [
         _sectionHeader('Tier border effects'),
@@ -1212,13 +1380,16 @@ class _SidebarItemState extends State<_SidebarItem> {
                   size: 16,
                   color: active ? AppTheme.accent : AppTheme.textSecondary),
               const SizedBox(width: 10),
-              Text(
-                widget.label,
-                style: TextStyle(
-                  color: active ? AppTheme.accent : AppTheme.textSecondary,
-                  fontSize: 13,
-                  fontWeight:
-                      active ? FontWeight.w600 : FontWeight.normal,
+              Expanded(
+                child: Text(
+                  widget.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: active ? AppTheme.accent : AppTheme.textSecondary,
+                    fontSize: 13,
+                    fontWeight: active ? FontWeight.w600 : FontWeight.normal,
+                  ),
                 ),
               ),
             ],

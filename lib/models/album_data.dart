@@ -8,6 +8,8 @@ class AlbumData {
   List<String>? _tagIds;
   final DateTime createdAt;
   DateTime? updatedAt;
+  DateTime? lastViewedAt;
+  bool isFavourite;
 
   // Null-safe getter: guards against hot-reload stale instances and missing JSON key.
   List<String> get tagIds => _tagIds ?? const [];
@@ -20,6 +22,8 @@ class AlbumData {
     List<String>? tagIds,
     DateTime? createdAt,
     this.updatedAt,
+    this.lastViewedAt,
+    this.isFavourite = false,
   })  : id = id ?? const Uuid().v4(),
         itemIds = itemIds ?? [],
         _tagIds = tagIds ?? [],
@@ -37,6 +41,8 @@ class AlbumData {
         'tagIds': List<String>.from(tagIds),
         'createdAt': createdAt.toIso8601String(),
         'updatedAt': (updatedAt ?? createdAt).toIso8601String(),
+        'lastViewedAt': lastViewedAt?.toIso8601String(),
+        'isFavourite': isFavourite,
       };
 
   factory AlbumData.fromJson(Map<String, dynamic> j) => AlbumData(
@@ -49,5 +55,9 @@ class AlbumData {
         updatedAt: j['updatedAt'] != null
             ? DateTime.parse(j['updatedAt'] as String)
             : null,
+        lastViewedAt: j['lastViewedAt'] != null
+            ? DateTime.parse(j['lastViewedAt'] as String)
+            : null,
+        isFavourite: (j['isFavourite'] as bool?) ?? false,
       );
 }

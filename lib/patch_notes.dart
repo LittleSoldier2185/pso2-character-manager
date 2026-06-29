@@ -11,6 +11,93 @@ class _PatchEntry {
 }
 
 const _entries = [
+  _PatchEntry('1.5.1', 'Album sort, favourites, card styles & Gallery settings', '''
+ALBUMS
+
+• Album sort — the Albums toolbar now has a Sort button. Choose from ten
+  sort options:
+  — Manual order (insertion / drag order)
+  — Name A → Z / Z → A
+  — Newest first / Oldest first (by creation date)
+  — Last modified (most recently edited first)
+  — Most photos (largest album first)
+  — Most tags (most tagged first)
+  — Recently viewed (albums you opened last, first)
+  — Cover name A → Z (sorted by the name of the cover character)
+
+  Your chosen sort is remembered and restored the next time you open the app.
+
+• Favourites on top — the Sort menu also has a "Favourites on top" toggle.
+  When enabled, all favourite albums are pinned above the rest, regardless
+  of the active sort order. This preference is also remembered across sessions.
+
+• Album favourites — any album can now be marked as a favourite.
+  — A heart icon appears in the top-right corner of the album card.
+    It is always visible when the album is a favourite (pink); it fades in
+    on hover when it is not, so you can toggle it without right-clicking.
+  — Right-click any album card to find the Favourite / Unfavourite option
+    at the top of the context menu.
+
+• Album card styles — four visual styles for album cards, selectable in
+  Settings → Gallery. The style applies globally to all album cards.
+  — Default — rounded card with a dark info bar below the image
+  — Book — flat spine on the left, rounded right edge, two page layers
+    visible on the right side (like a physical book on a shelf)
+  — Polaroid — light frame with equal padding on three sides and the
+    album name printed on a white bottom section
+  — Magazine — full-bleed cover image with the album name and image count
+    overlaid on a gradient at the bottom
+
+• Album thumbnail aspect ratio — cover images now display correctly at any
+  aspect ratio. A blurred version of the cover fills the card background
+  so 16:9 landscape images and 9:16 portrait images both look clean without
+  cropping or empty black bars.
+
+SETTINGS — GALLERY (NEW PAGE)
+
+• A new "Gallery" page has been added to Settings. It currently contains:
+  — Blur sensitive images in viewer — moved from the Appearance tab
+  — Album card style — pick Default, Book, Polaroid, or Magazine
+  — Default reader layout — set the layout mode (Horizontal, Vertical, or
+    Book spread) that opens automatically when you enter an album reader.
+    Your choice is remembered across sessions.
+
+GALLERY VIEWER — KEYBOARD & ZOOM
+
+• Keyboard controls — the full-screen gallery viewer now responds to keyboard
+  input:
+  — Arrow Left / Arrow Right — previous / next image
+  — Escape — close the viewer
+  — Numpad + / = — zoom in (0.5× per press)
+  — Numpad − / − — zoom out (0.5× per press)
+
+• Scroll-wheel zoom — scrolling the mouse wheel over the viewer zooms in or
+  out continuously, anchored to the position of the cursor so the area under
+  the pointer stays fixed.
+
+• Zoom bar — a compact slider is now shown at the bottom-left of the full-screen
+  viewer. It spans 1× to 6× and shows the current zoom level. Click the ± icons
+  on either side or drag the thumb to adjust zoom.
+
+• Page lock — when zoomed in above 1×, the page swipe gesture is disabled so
+  horizontal mouse drags pan the image instead of flipping to the next photo.
+  Swiping resumes automatically once you zoom back to 1×.
+
+ALBUM READER — ZOOM IMPROVEMENT
+
+• Focal-point scroll zoom — the album reader's scroll-wheel zoom now anchors
+  to the cursor position, matching the behaviour added to the gallery viewer.
+
+BUG FIX
+
+• Favourites on top (characters) — the "Favourites on top" toggle in the
+  character sort menu was not being saved. It now persists correctly across
+  app restarts.
+
+• Image drift on zoom-out — zooming back to 1× in the gallery viewer or album
+  reader could leave the image off-centre after panning. The image now snaps
+  back to centre when fully zoomed out.
+'''),
   _PatchEntry('1.5.0', 'Albums (major), recycle bin, list view & more', '''
 ALBUMS — MAJOR UPDATE
 

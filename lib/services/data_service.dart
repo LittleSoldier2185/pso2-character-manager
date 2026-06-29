@@ -26,9 +26,14 @@ class AppSettings {
   int galleryColumns;
   bool gameFolderPromptShown;
   String? sortOption;
+  String? albumSortOption;
+  bool favouritesOnTop;
+  bool albumFavouritesOnTop;
   String? lastSeenVersion;
   String? tierEffectsJson;
   bool blurSensitiveInViews;
+  String defaultReaderLayout;
+  String albumCardStyle;
 
   AppSettings({
     this.gameFolderPath,
@@ -43,9 +48,14 @@ class AppSettings {
     this.galleryColumns = 3,
     this.gameFolderPromptShown = false,
     this.sortOption,
+    this.albumSortOption,
+    this.favouritesOnTop = true,
+    this.albumFavouritesOnTop = true,
     this.lastSeenVersion,
     this.tierEffectsJson,
     this.blurSensitiveInViews = true,
+    this.defaultReaderLayout = 'horizontal',
+    this.albumCardStyle = 'default',
   });
 
   Color? get accentColorValue =>
@@ -64,9 +74,14 @@ class AppSettings {
     'galleryColumns': galleryColumns,
     'gameFolderPromptShown': gameFolderPromptShown,
     'sortOption': sortOption,
+    'albumSortOption': albumSortOption,
+    'favouritesOnTop': favouritesOnTop,
+    'albumFavouritesOnTop': albumFavouritesOnTop,
     'lastSeenVersion': lastSeenVersion,
     'tierEffectsJson': tierEffectsJson,
     'blurSensitiveInViews': blurSensitiveInViews,
+    'defaultReaderLayout': defaultReaderLayout,
+    'albumCardStyle': albumCardStyle,
   };
 
   factory AppSettings.fromJson(Map<String, dynamic> j) => AppSettings(
@@ -82,9 +97,14 @@ class AppSettings {
     galleryColumns: (j['galleryColumns'] as int?) ?? 3,
     gameFolderPromptShown: (j['gameFolderPromptShown'] as bool?) ?? false,
     sortOption: j['sortOption'] as String?,
+    albumSortOption: j['albumSortOption'] as String?,
+    favouritesOnTop: (j['favouritesOnTop'] as bool?) ?? true,
+    albumFavouritesOnTop: (j['albumFavouritesOnTop'] as bool?) ?? true,
     lastSeenVersion: j['lastSeenVersion'] as String?,
     tierEffectsJson: j['tierEffectsJson'] as String?,
     blurSensitiveInViews: (j['blurSensitiveInViews'] as bool?) ?? true,
+    defaultReaderLayout: (j['defaultReaderLayout'] as String?) ?? 'horizontal',
+    albumCardStyle: (j['albumCardStyle'] as String?) ?? 'default',
   );
 }
 
@@ -230,6 +250,24 @@ class DataService {
     await saveSettings(s);
   }
 
+  Future<void> saveAlbumSortOption(String v) async {
+    final s = await getSettings();
+    s.albumSortOption = v;
+    await saveSettings(s);
+  }
+
+  Future<void> saveFavouritesOnTop(bool v) async {
+    final s = await getSettings();
+    s.favouritesOnTop = v;
+    await saveSettings(s);
+  }
+
+  Future<void> saveAlbumFavouritesOnTop(bool v) async {
+    final s = await getSettings();
+    s.albumFavouritesOnTop = v;
+    await saveSettings(s);
+  }
+
   Future<void> saveLastSeenVersion(String v) async {
     final s = await getSettings();
     s.lastSeenVersion = v;
@@ -290,6 +328,18 @@ class DataService {
   Future<void> saveBlurSensitiveInViews(bool v) async {
     final s = await getSettings();
     s.blurSensitiveInViews = v;
+    await saveSettings(s);
+  }
+
+  Future<void> saveDefaultReaderLayout(String v) async {
+    final s = await getSettings();
+    s.defaultReaderLayout = v;
+    await saveSettings(s);
+  }
+
+  Future<void> saveAlbumCardStyle(String v) async {
+    final s = await getSettings();
+    s.albumCardStyle = v;
     await saveSettings(s);
   }
 

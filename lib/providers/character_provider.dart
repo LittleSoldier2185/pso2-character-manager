@@ -102,6 +102,51 @@ extension SortOptionLabel on SortOption {
   }
 }
 
+enum AlbumSortOption {
+  manual,
+  nameAZ,
+  nameZA,
+  newestFirst,
+  oldestFirst,
+  lastModified,
+  photoCountDesc,
+  tagCountDesc,
+  recentlyViewed,
+  coverName,
+}
+
+extension AlbumSortOptionLabel on AlbumSortOption {
+  String get label {
+    switch (this) {
+      case AlbumSortOption.manual:         return 'Manual order';
+      case AlbumSortOption.nameAZ:         return 'Name A → Z';
+      case AlbumSortOption.nameZA:         return 'Name Z → A';
+      case AlbumSortOption.newestFirst:    return 'Newest first';
+      case AlbumSortOption.oldestFirst:    return 'Oldest first';
+      case AlbumSortOption.lastModified:   return 'Last modified';
+      case AlbumSortOption.photoCountDesc: return 'Most photos';
+      case AlbumSortOption.tagCountDesc:   return 'Most tags';
+      case AlbumSortOption.recentlyViewed: return 'Recently viewed';
+      case AlbumSortOption.coverName:      return 'Cover name A → Z';
+    }
+  }
+
+  IconData get icon {
+    switch (this) {
+      case AlbumSortOption.manual:         return Icons.drag_indicator_rounded;
+      case AlbumSortOption.nameAZ:         return Icons.sort_by_alpha_rounded;
+      case AlbumSortOption.nameZA:         return Icons.sort_by_alpha_rounded;
+      case AlbumSortOption.newestFirst:    return Icons.schedule_rounded;
+      case AlbumSortOption.oldestFirst:    return Icons.history_rounded;
+      case AlbumSortOption.lastModified:   return Icons.edit_calendar_rounded;
+      case AlbumSortOption.photoCountDesc: return Icons.photo_library_rounded;
+      case AlbumSortOption.tagCountDesc:   return Icons.label_rounded;
+      case AlbumSortOption.recentlyViewed: return Icons.visibility_rounded;
+      case AlbumSortOption.coverName:      return Icons.person_rounded;
+    }
+  }
+}
+
 // ── Provider ──────────────────────────────────────────────────────
 
 class CharacterProvider extends ChangeNotifier {
@@ -136,12 +181,16 @@ class CharacterProvider extends ChangeNotifier {
   List<String> _filterTagsBlacklist = [];
   Set<CharacterTier> _filterTiers   = {};
   SortOption _sortOption            = SortOption.newestFirst;
+  AlbumSortOption _albumSortOption  = AlbumSortOption.newestFirst;
+  bool _albumFavouritesOnTop        = true;
   bool _favouritesOnTop             = true;
 
   List<FilterPreset> _savedPresets = [];
   bool _matchAll       = true;
   bool _persistFilter  = false;
-  bool _blurSensitiveInViews = true;
+  bool   _blurSensitiveInViews  = true;
+  String _defaultReaderLayout   = 'horizontal';
+  String _albumCardStyle        = 'default';
 
   String? _gameFolderPath;
   String? _saveLocation;
@@ -159,6 +208,49 @@ class CharacterProvider extends ChangeNotifier {
   List<AlbumData>      get allAlbums      => _albums;
   Set<String>          get albumTagFilter => _albumTagFilter;
 
+  List<AlbumData> get sortedAlbums {
+    final list = List<AlbumData>.from(_albums);
+    switch (_albumSortOption) {
+      case AlbumSortOption.manual:
+        break;
+      case AlbumSortOption.nameAZ:
+        list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      case AlbumSortOption.nameZA:
+        list.sort((a, b) => b.name.toLowerCase().compareTo(a.name.toLowerCase()));
+      case AlbumSortOption.newestFirst:
+        list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      case AlbumSortOption.oldestFirst:
+        list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+      case AlbumSortOption.lastModified:
+        list.sort((a, b) => (b.updatedAt ?? b.createdAt).compareTo(a.updatedAt ?? a.createdAt));
+      case AlbumSortOption.photoCountDesc:
+        list.sort((a, b) => b.itemIds.length.compareTo(a.itemIds.length));
+      case AlbumSortOption.tagCountDesc:
+        list.sort((a, b) => b.tagIds.length.compareTo(a.tagIds.length));
+      case AlbumSortOption.recentlyViewed:
+        list.sort((a, b) {
+          final av = a.lastViewedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          final bv = b.lastViewedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+          return bv.compareTo(av);
+        });
+      case AlbumSortOption.coverName:
+        list.sort((a, b) {
+          String n(String? id) {
+            if (id == null) return '';
+            try { return _characters.firstWhere((c) => c.id == id).name.toLowerCase(); }
+            catch (_) { return ''; }
+          }
+          return n(a.coverId).compareTo(n(b.coverId));
+        });
+    }
+    if (_albumFavouritesOnTop) {
+      final favs = list.where((a) => a.isFavourite).toList();
+      final rest = list.where((a) => !a.isFavourite).toList();
+      return [...favs, ...rest];
+    }
+    return list;
+  }
+
   TagData? tagById(String id) {
     try { return _tags.firstWhere((t) => t.id == id); } catch (_) { return null; }
   }
@@ -171,12 +263,16 @@ class CharacterProvider extends ChangeNotifier {
   List<String> get filterTags           => _filterTags;
   List<String> get filterTagsBlacklist  => _filterTagsBlacklist;
   Set<CharacterTier> get filterTiers    => _filterTiers;
-  SortOption   get sortOption           => _sortOption;
-  bool         get favouritesOnTop      => _favouritesOnTop;
+  SortOption      get sortOption       => _sortOption;
+  AlbumSortOption get albumSortOption      => _albumSortOption;
+  bool            get albumFavouritesOnTop => _albumFavouritesOnTop;
+  bool            get favouritesOnTop      => _favouritesOnTop;
   List<FilterPreset> get savedPresets   => _savedPresets;
   bool         get persistFilter        => _persistFilter;
   bool         get matchAll             => _matchAll;
   bool         get blurSensitiveInViews => _blurSensitiveInViews;
+  String       get defaultReaderLayout  => _defaultReaderLayout;
+  String       get albumCardStyle       => _albumCardStyle;
   String?      get gameFolderPath       => _gameFolderPath;
   String?      get saveLocation         => _saveLocation;
 
@@ -300,9 +396,36 @@ class CharacterProvider extends ChangeNotifier {
     _data.saveSortOption(option.name);
   }
 
+  void setAlbumSortOption(AlbumSortOption option) {
+    _albumSortOption = option;
+    notifyListeners();
+    _data.saveAlbumSortOption(option.name);
+  }
+
+  Future<void> toggleAlbumFavourite(AlbumData album) async {
+    album.isFavourite = !album.isFavourite;
+    await _data.saveAlbums(_albums);
+    notifyListeners();
+  }
+
+  Future<void> touchAlbumViewed(String id) async {
+    final idx = _albums.indexWhere((a) => a.id == id);
+    if (idx == -1) return;
+    _albums[idx].lastViewedAt = DateTime.now();
+    await _data.saveAlbums(_albums);
+    if (_albumSortOption == AlbumSortOption.recentlyViewed) notifyListeners();
+  }
+
   void setFavouritesOnTop(bool value) {
     _favouritesOnTop = value;
     notifyListeners();
+    _data.saveFavouritesOnTop(value);
+  }
+
+  void setAlbumFavouritesOnTop(bool value) {
+    _albumFavouritesOnTop = value;
+    notifyListeners();
+    _data.saveAlbumFavouritesOnTop(value);
   }
 
   // ── Init ──────────────────────────────────────────────────────────
@@ -316,9 +439,16 @@ class CharacterProvider extends ChangeNotifier {
     _saveLocation   = settings.saveLocation;
     _persistFilter  = settings.persistFilter;
     _blurSensitiveInViews = settings.blurSensitiveInViews;
+    _defaultReaderLayout  = settings.defaultReaderLayout;
+    _albumCardStyle       = settings.albumCardStyle;
     if (settings.sortOption != null) {
       _sortOption = SortOption.values.byName(settings.sortOption!);
     }
+    if (settings.albumSortOption != null) {
+      _albumSortOption = AlbumSortOption.values.byName(settings.albumSortOption!);
+    }
+    _favouritesOnTop      = settings.favouritesOnTop;
+    _albumFavouritesOnTop = settings.albumFavouritesOnTop;
 
     await _data.purgeExpiredTrash();
     _characters  = await _data.getAllCharacters();
@@ -1690,6 +1820,18 @@ class CharacterProvider extends ChangeNotifier {
   Future<void> setBlurSensitiveInViews(bool value) async {
     _blurSensitiveInViews = value;
     await _data.saveBlurSensitiveInViews(value);
+    notifyListeners();
+  }
+
+  Future<void> setDefaultReaderLayout(String value) async {
+    _defaultReaderLayout = value;
+    await _data.saveDefaultReaderLayout(value);
+    notifyListeners();
+  }
+
+  Future<void> setAlbumCardStyle(String value) async {
+    _albumCardStyle = value;
+    await _data.saveAlbumCardStyle(value);
     notifyListeners();
   }
 

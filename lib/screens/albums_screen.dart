@@ -242,7 +242,7 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
   Widget build(BuildContext context) {
     return Consumer<CharacterProvider>(
       builder: (context, provider, _) {
-        final all = provider.allAlbums;
+        final all = provider.sortedAlbums;
         final activeTagFilter = provider.albumTagFilter;
         var albums = _query.isEmpty
             ? all
@@ -298,6 +298,86 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
                         contentPadding:
                             const EdgeInsets.symmetric(vertical: 8),
                         isDense: true,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  PopupMenuButton<String>(
+                    onSelected: (v) {
+                      if (v == '__fav_top__') {
+                        provider.setAlbumFavouritesOnTop(!provider.albumFavouritesOnTop);
+                      } else {
+                        provider.setAlbumSortOption(AlbumSortOption.values.byName(v));
+                      }
+                    },
+                    color: AppTheme.bgCard,
+                    tooltip: 'Sort albums',
+                    itemBuilder: (_) => [
+                      PopupMenuItem<String>(
+                        value: '__fav_top__',
+                        child: Row(
+                          children: [
+                            Icon(
+                              provider.albumFavouritesOnTop
+                                  ? Icons.check_box_rounded
+                                  : Icons.check_box_outline_blank_rounded,
+                              size: 14,
+                              color: provider.albumFavouritesOnTop
+                                  ? Colors.pinkAccent
+                                  : AppTheme.textSecondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Text('Favourites on top',
+                                style: TextStyle(
+                                    fontSize: 13,
+                                    color: provider.albumFavouritesOnTop
+                                        ? Colors.pinkAccent
+                                        : AppTheme.textPrimary)),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuDivider(),
+                      ...AlbumSortOption.values.map((opt) =>
+                        CheckedPopupMenuItem<String>(
+                          value: opt.name,
+                          checked: provider.albumSortOption == opt,
+                          child: Row(
+                            children: [
+                              Icon(opt.icon, size: 14, color: AppTheme.textSecondary),
+                              const SizedBox(width: 8),
+                              Text(opt.label, style: TextStyle(
+                                fontSize: 13, color: AppTheme.textPrimary)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: provider.albumSortOption != AlbumSortOption.newestFirst
+                            ? AppTheme.accent.withValues(alpha: 0.15)
+                            : AppTheme.bgSurface,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: provider.albumSortOption != AlbumSortOption.newestFirst
+                              ? AppTheme.accent
+                              : AppTheme.borderColor,
+                          width: provider.albumSortOption != AlbumSortOption.newestFirst ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.sort_rounded, size: 14,
+                              color: provider.albumSortOption != AlbumSortOption.newestFirst
+                                  ? AppTheme.accent : AppTheme.textSecondary),
+                          const SizedBox(width: 6),
+                          Text('Sort', style: TextStyle(
+                              fontSize: 12,
+                              color: provider.albumSortOption != AlbumSortOption.newestFirst
+                                  ? AppTheme.accent : AppTheme.textSecondary)),
+                        ],
                       ),
                     ),
                   ),
@@ -420,6 +500,7 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
                             allItems: allItems,
                             allCharacters: provider.allCharacters,
                             allAlbumTags: albumTags,
+                            cardStyle: provider.albumCardStyle,
                             onTap: () => _openViewer(context, albums[i]),
                             onRename: () =>
                                 _renameAlbum(context, provider, albums[i]),
@@ -427,6 +508,8 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
                                 _deleteAlbum(context, provider, albums[i]),
                             onEditTags: () =>
                                 _editAlbumTags(context, provider, albums[i]),
+                            onToggleFavourite: () =>
+                                provider.toggleAlbumFavourite(albums[i]),
                           ),
                         ),
             ),
@@ -445,6 +528,7 @@ class _AlbumsScreenState extends State<AlbumsScreen> {
   }
 
   void _openViewer(BuildContext context, AlbumData album) {
+    context.read<CharacterProvider>().touchAlbumViewed(album.id);
     showDialog(
       context: context,
       barrierColor: Colors.black.withValues(alpha: 0.9),
@@ -576,20 +660,24 @@ class _AlbumCard extends StatefulWidget {
   final List<GalleryItemData> allItems;
   final List<CharacterData> allCharacters;
   final List<TagData> allAlbumTags;
+  final String cardStyle;
   final VoidCallback onTap;
   final VoidCallback onRename;
   final VoidCallback onDelete;
   final VoidCallback onEditTags;
+  final VoidCallback onToggleFavourite;
 
   const _AlbumCard({
     required this.album,
     required this.allItems,
     required this.allCharacters,
     required this.allAlbumTags,
+    required this.cardStyle,
     required this.onTap,
     required this.onRename,
     required this.onDelete,
     required this.onEditTags,
+    required this.onToggleFavourite,
   });
 
   @override
@@ -621,6 +709,13 @@ class _AlbumCardState extends State<_AlbumCard> {
           pos.dx, pos.dy, size.width - pos.dx, size.height - pos.dy),
       items: [
         PopupMenuItem(
+            value: 'favourite',
+            child: _menuRow(
+                widget.album.isFavourite
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                widget.album.isFavourite ? 'Unfavourite' : 'Favourite')),
+        PopupMenuItem(
             value: 'rename',
             child: _menuRow(
                 Icons.drive_file_rename_outline_rounded, 'Rename')),
@@ -633,6 +728,7 @@ class _AlbumCardState extends State<_AlbumCard> {
             child: _menuRow(Icons.delete_outline_rounded, 'Delete')),
       ],
     );
+    if (result == 'favourite') widget.onToggleFavourite();
     if (result == 'rename') widget.onRename();
     if (result == 'tags') widget.onEditTags();
     if (result == 'delete') widget.onDelete();
@@ -647,6 +743,364 @@ class _AlbumCardState extends State<_AlbumCard> {
               style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
         ],
       );
+
+  // ── Shared helpers ────────────────────────────────────────────────
+
+  Widget _imageContent(bool hasImage, String path) {
+    if (!hasImage) {
+      return Container(
+        color: AppTheme.bgCard,
+        child: Center(
+          child: Icon(Icons.photo_album_outlined,
+              size: 32,
+              color: AppTheme.textSecondary.withValues(alpha: 0.3)),
+        ),
+      );
+    }
+    if (_cover!.isBlurred) {
+      return ImageFiltered(
+        imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: Image.file(File(path), fit: BoxFit.cover, gaplessPlayback: true),
+      );
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        ImageFiltered(
+          imageFilter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Image.file(File(path), fit: BoxFit.cover, gaplessPlayback: true),
+        ),
+        Image.file(File(path), fit: BoxFit.contain, gaplessPlayback: true),
+      ],
+    );
+  }
+
+  Widget _heartBtn() => Positioned(
+        top: 6,
+        right: 6,
+        child: GestureDetector(
+          onTap: widget.onToggleFavourite,
+          child: AnimatedOpacity(
+            duration: const Duration(milliseconds: 120),
+            opacity: widget.album.isFavourite ? 1.0 : (_hovered ? 0.7 : 0.0),
+            child: Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.45),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                widget.album.isFavourite
+                    ? Icons.favorite_rounded
+                    : Icons.favorite_border_rounded,
+                size: 14,
+                color:
+                    widget.album.isFavourite ? Colors.pinkAccent : Colors.white,
+              ),
+            ),
+          ),
+        ),
+      );
+
+  Widget _infoBar(int count, {BorderRadiusGeometry? borderRadius}) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: AppTheme.bgCard,
+          borderRadius: borderRadius,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(widget.album.name,
+                style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis),
+            const SizedBox(height: 2),
+            Text('$count image${count == 1 ? '' : 's'}',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+          ],
+        ),
+      );
+
+  // ── Style builders ────────────────────────────────────────────────
+
+  Widget _buildDefault(bool hasImage, String path, int count) =>
+      AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          color: AppTheme.bgSurface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: _hovered
+                ? AppTheme.accent.withValues(alpha: 0.5)
+                : AppTheme.borderColor,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: ClipRRect(
+                borderRadius:
+                    const BorderRadius.vertical(top: Radius.circular(7)),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _imageContent(hasImage, path),
+                    if (widget.album.isFavourite || _hovered) _heartBtn(),
+                  ],
+                ),
+              ),
+            ),
+            _infoBar(count,
+                borderRadius:
+                    const BorderRadius.vertical(bottom: Radius.circular(7))),
+          ],
+        ),
+      );
+
+  Widget _buildBook(bool hasImage, String path, int count) => Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: 0, top: 6, right: -8, bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppTheme.bgCard,
+                borderRadius: const BorderRadius.only(
+                    topRight: Radius.circular(8),
+                    bottomRight: Radius.circular(8)),
+                border: Border.all(
+                    color: AppTheme.borderColor.withValues(alpha: 0.4)),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 0, top: 3, right: -4, bottom: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppTheme.bgSurface,
+                borderRadius: const BorderRadius.only(
+                    topRight: Radius.circular(8),
+                    bottomRight: Radius.circular(8)),
+                border: Border.all(
+                    color: AppTheme.borderColor.withValues(alpha: 0.65)),
+              ),
+            ),
+          ),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            decoration: BoxDecoration(
+              color: AppTheme.bgSurface,
+              borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(8),
+                  bottomRight: Radius.circular(8)),
+              border: Border.all(
+                color: _hovered
+                    ? AppTheme.accent.withValues(alpha: 0.5)
+                    : AppTheme.borderColor,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  offset: const Offset(2, 6),
+                  blurRadius: 10,
+                ),
+              ],
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 10,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.centerLeft,
+                      end: Alignment.centerRight,
+                      colors: [
+                        Colors.black.withValues(alpha: 0.5),
+                        Colors.black.withValues(alpha: 0.0),
+                      ],
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: const BorderRadius.only(
+                              topRight: Radius.circular(7)),
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              _imageContent(hasImage, path),
+                              if (widget.album.isFavourite || _hovered)
+                                _heartBtn(),
+                            ],
+                          ),
+                        ),
+                      ),
+                      _infoBar(count,
+                          borderRadius: const BorderRadius.only(
+                              bottomRight: Radius.circular(7))),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+
+  Widget _buildPolaroid(bool hasImage, String path, int count) =>
+      AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEEEEEE),
+          borderRadius: BorderRadius.circular(3),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.35),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+          border: _hovered
+              ? Border.all(color: AppTheme.accent.withValues(alpha: 0.6))
+              : null,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(7, 7, 7, 0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _imageContent(hasImage, path),
+                      if (widget.album.isFavourite || _hovered) _heartBtn(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            SizedBox(
+              height: 38,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(widget.album.name,
+                        style: const TextStyle(
+                            color: Color(0xFF1A1A1A),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis),
+                    Text('$count image${count == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                            color: Color(0xFF666666), fontSize: 9)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  Widget _buildMagazine(bool hasImage, String path, int count) =>
+      AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        decoration: BoxDecoration(
+          color: AppTheme.bgCard,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: _hovered
+                ? AppTheme.accent.withValues(alpha: 0.5)
+                : Colors.transparent,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(7),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              hasImage
+                  ? (_cover!.isBlurred
+                      ? ImageFiltered(
+                          imageFilter:
+                              ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                          child: Image.file(File(path),
+                              fit: BoxFit.cover, gaplessPlayback: true))
+                      : Image.file(File(path),
+                          fit: BoxFit.cover, gaplessPlayback: true))
+                  : Container(
+                      color: AppTheme.bgCard,
+                      child: Center(
+                        child: Icon(Icons.photo_album_outlined,
+                            size: 32,
+                            color:
+                                AppTheme.textSecondary.withValues(alpha: 0.3)),
+                      ),
+                    ),
+              Positioned(
+                bottom: 0, left: 0, right: 0,
+                child: Container(
+                  padding: const EdgeInsets.fromLTRB(8, 24, 8, 8),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.transparent,
+                        Colors.black.withValues(alpha: 0.82),
+                      ],
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(widget.album.name,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis),
+                      Text('$count image${count == 1 ? '' : 's'}',
+                          style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              fontSize: 10)),
+                    ],
+                  ),
+                ),
+              ),
+              if (widget.album.isFavourite || _hovered) _heartBtn(),
+            ],
+          ),
+        ),
+      );
+
+  // ── Build ─────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -663,76 +1117,12 @@ class _AlbumCardState extends State<_AlbumCard> {
       child: GestureDetector(
         onTap: widget.onTap,
         onSecondaryTapUp: (d) => _showCtxMenu(context, d.globalPosition),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          decoration: BoxDecoration(
-            color: AppTheme.bgSurface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: _hovered
-                  ? AppTheme.accent.withValues(alpha: 0.5)
-                  : AppTheme.borderColor,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(
-                child: ClipRRect(
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(7)),
-                  child: hasImage
-                      ? cover!.isBlurred
-                          ? ImageFiltered(
-                              imageFilter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
-                              child: Image.file(File(path),
-                                  fit: BoxFit.cover, gaplessPlayback: true))
-                          : Image.file(File(path),
-                              fit: BoxFit.cover, gaplessPlayback: true)
-                      : Container(
-                          color: AppTheme.bgCard,
-                          child: Center(
-                            child: Icon(Icons.photo_album_outlined,
-                                size: 32,
-                                color: AppTheme.textSecondary
-                                    .withValues(alpha: 0.3)),
-                          ),
-                        ),
-                ),
-              ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.bgCard,
-                  borderRadius: const BorderRadius.vertical(
-                      bottom: Radius.circular(7)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      widget.album.name,
-                      style: TextStyle(
-                          color: AppTheme.textPrimary,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      '$count image${count == 1 ? '' : 's'}',
-                      style: TextStyle(
-                          color: AppTheme.textSecondary, fontSize: 10),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+        child: switch (widget.cardStyle) {
+          'book'     => _buildBook(hasImage, path, count),
+          'polaroid' => _buildPolaroid(hasImage, path, count),
+          'magazine' => _buildMagazine(hasImage, path, count),
+          _          => _buildDefault(hasImage, path, count),
+        },
       ),
     );
   }
@@ -773,13 +1163,22 @@ class _AlbumDetailDialogState extends State<_AlbumDetailDialog> {
   int _autoPlaySeconds = 3;
   Timer? _autoPlayTimer;
   int _autoPlayTotalPages = 0;
-
   @override
   void initState() {
     super.initState();
     _pageCtrl = PageController();
     _nameCtrl.text = widget.album.name;
     _descCtrl.text = widget.album.description;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final layout = context.read<CharacterProvider>().defaultReaderLayout;
+      final mode = switch (layout) {
+        'vertical' => _ReaderMode.vertical,
+        'book'     => _ReaderMode.book,
+        _          => _ReaderMode.horizontal,
+      };
+      if (mode != _readerMode) setState(() => _readerMode = mode);
+    });
   }
 
   @override
@@ -801,6 +1200,20 @@ class _AlbumDetailDialogState extends State<_AlbumDetailDialog> {
       ..translateByDouble(w / 2 * (1 - scale), h / 2 * (1 - scale), 0, 1)
       ..scaleByDouble(scale, scale, 1.0, 1.0);
     setState(() => _zoomLevel = scale);
+  }
+
+  void _zoomAtCursor(Offset cursor, double newScale) {
+    final v = newScale.clamp(1.0, 5.0);
+    if (v == _zoomLevel) return;
+    if (v == 1.0) { _resetZoom(); setState(() {}); return; }
+    final change = v / _zoomLevel;
+    final pivot = Matrix4.identity()
+      ..translate(cursor.dx, cursor.dy, 0.0)
+      ..scale(change, change, 1.0)
+      ..translate(-cursor.dx, -cursor.dy, 0.0);
+    pivot.multiply(_transformCtrl.value);
+    _transformCtrl.value = pivot;
+    setState(() => _zoomLevel = v);
   }
 
   void _resetZoom() {
@@ -1372,7 +1785,7 @@ class _AlbumDetailDialogState extends State<_AlbumDetailDialog> {
                   if (event is PointerScrollEvent) {
                     final newZoom = (_zoomLevel - event.scrollDelta.dy * 0.005)
                         .clamp(1.0, 5.0);
-                    if (newZoom != _zoomLevel) _setZoom(newZoom);
+                    _zoomAtCursor(event.localPosition, newZoom);
                   }
                 },
                 child: Stack(

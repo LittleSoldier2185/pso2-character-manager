@@ -1,6 +1,8 @@
 import 'dart:io';
 import 'dart:ui';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pasteboard/pasteboard.dart';
 import 'package:provider/provider.dart';
 import '../models/album_data.dart';
@@ -869,6 +871,9 @@ class _FullscreenViewerState extends State<_FullscreenViewer> {
   late PageController _pageCtrl;
   late int _currentIndex;
   final _revealedIds = <String>{};
+  double _zoomLevel = 1.0;
+  final _transformCtrl = TransformationController();
+  Size _viewerSize = Size.zero;
 
   @override
   void initState() {
@@ -880,7 +885,32 @@ class _FullscreenViewerState extends State<_FullscreenViewer> {
   @override
   void dispose() {
     _pageCtrl.dispose();
+    _transformCtrl.dispose();
     super.dispose();
+  }
+
+  void _setZoom(double z) {
+    final v = z.clamp(1.0, 6.0);
+    _zoomAtCursor(Offset(_viewerSize.width / 2, _viewerSize.height / 2), v);
+  }
+
+  void _zoomAtCursor(Offset cursor, double newScale) {
+    final v = newScale.clamp(1.0, 6.0);
+    if (v == _zoomLevel) return;
+    if (v == 1.0) { _resetZoom(); setState(() {}); return; }
+    final change = v / _zoomLevel;
+    final pivot = Matrix4.identity()
+      ..translate(cursor.dx, cursor.dy, 0.0)
+      ..scale(change, change, 1.0)
+      ..translate(-cursor.dx, -cursor.dy, 0.0);
+    pivot.multiply(_transformCtrl.value);
+    _transformCtrl.value = pivot;
+    setState(() => _zoomLevel = v);
+  }
+
+  void _resetZoom() {
+    _transformCtrl.value = Matrix4.identity();
+    _zoomLevel = 1.0;
   }
 
   CharacterData? get _currentChar {
@@ -897,13 +927,62 @@ class _FullscreenViewerState extends State<_FullscreenViewer> {
     return Dialog(
       backgroundColor: Colors.black,
       insetPadding: const EdgeInsets.all(16),
-      child: Stack(
+      child: Listener(
+        onPointerSignal: (e) {
+          if (e is PointerScrollEvent) {
+            final z = (_zoomLevel - e.scrollDelta.dy * 0.005).clamp(1.0, 6.0);
+            _zoomAtCursor(e.localPosition, z);
+          }
+        },
+        child: Focus(
+          autofocus: true,
+          onKeyEvent: (_, e) {
+            if (e is! KeyDownEvent) return KeyEventResult.ignored;
+            final k = e.logicalKey;
+            if (k == LogicalKeyboardKey.escape) {
+              Navigator.pop(context);
+              return KeyEventResult.handled;
+            }
+            if (k == LogicalKeyboardKey.arrowLeft && _currentIndex > 0) {
+              _pageCtrl.previousPage(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut);
+              return KeyEventResult.handled;
+            }
+            if (k == LogicalKeyboardKey.arrowRight &&
+                _currentIndex < widget.items.length - 1) {
+              _pageCtrl.nextPage(
+                  duration: const Duration(milliseconds: 200),
+                  curve: Curves.easeOut);
+              return KeyEventResult.handled;
+            }
+            if (k == LogicalKeyboardKey.numpadAdd ||
+                k == LogicalKeyboardKey.equal) {
+              _setZoom(_zoomLevel + 0.5);
+              return KeyEventResult.handled;
+            }
+            if (k == LogicalKeyboardKey.numpadSubtract ||
+                k == LogicalKeyboardKey.minus) {
+              _setZoom(_zoomLevel - 0.5);
+              return KeyEventResult.handled;
+            }
+            return KeyEventResult.ignored;
+          },
+          child: LayoutBuilder(builder: (_, constraints) {
+            _viewerSize = constraints.biggest;
+            return Stack(
         children: [
           // Page view
           PageView.builder(
             controller: _pageCtrl,
+            physics: _zoomLevel > 1.0
+                ? const NeverScrollableScrollPhysics()
+                : const PageScrollPhysics(),
             itemCount: widget.items.length,
-            onPageChanged: (i) => setState(() => _currentIndex = i),
+            onPageChanged: (i) {
+              _resetZoom();
+              setState(() => _currentIndex = i);
+            },
             itemBuilder: (_, i) {
               final item = widget.items[i];
               final char = widget.characters
@@ -937,8 +1016,9 @@ class _FullscreenViewerState extends State<_FullscreenViewer> {
                       ),
                     )
                   : InteractiveViewer(
-                      minScale: 0.5,
-                      maxScale: 6,
+                      transformationController: _transformCtrl,
+                      scaleEnabled: false,
+                      panEnabled: _zoomLevel > 1.0,
                       child: Image.file(File(path), fit: BoxFit.contain, gaplessPlayback: true),
                     );
             },
@@ -1096,7 +1176,60 @@ class _FullscreenViewerState extends State<_FullscreenViewer> {
                 ),
               ),
             ),
+          // Zoom bar
+          Positioned(
+            bottom: 8,
+            left: 8,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.6),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: () => _setZoom(_zoomLevel - 0.5),
+                    child: Icon(Icons.zoom_out_rounded,
+                        color: _zoomLevel > 1.0
+                            ? Colors.white70
+                            : Colors.white30,
+                        size: 15),
+                  ),
+                  SizedBox(
+                    width: 140,
+                    child: Slider(
+                      value: _zoomLevel,
+                      min: 1.0,
+                      max: 6.0,
+                      activeColor: AppTheme.accent,
+                      inactiveColor: Colors.white24,
+                      onChanged: _setZoom,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => _setZoom(_zoomLevel + 0.5),
+                    child: Icon(Icons.zoom_in_rounded,
+                        color: _zoomLevel < 6.0
+                            ? Colors.white70
+                            : Colors.white30,
+                        size: 15),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    '${_zoomLevel.toStringAsFixed(1)}×',
+                    style: const TextStyle(
+                        color: Colors.white54, fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
+            );
+          }),
+        ),
       ),
     );
   }
