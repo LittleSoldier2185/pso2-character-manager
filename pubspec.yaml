@@ -1,7 +1,7 @@
 name: pso2_character_manager
 description: "PSO2 Character Data Manager - Local library for PSO2 character files."
 publish_to: 'none'
-version: 1.5.1
+version: 1.5.2
 
 environment:
   sdk: ^3.11.5
@@ -40,6 +40,9 @@ dependencies:
 
   # PDF generation for album export
   pdf: ^3.10.8
+
+  # Image decoding/encoding for PDF compression
+  image: ^4.3.0
 
   # Clipboard image support
   pasteboard: ^0.5.0

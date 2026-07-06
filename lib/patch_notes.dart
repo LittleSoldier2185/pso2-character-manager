@@ -11,6 +11,71 @@ class _PatchEntry {
 }
 
 const _entries = [
+  _PatchEntry('1.5.2', 'Bulk add to album, export improvements & loop play', '''
+GALLERY
+
+• Bulk select — a new Select button (checklist icon) in the Gallery toolbar
+  enters bulk selection mode. Tap any images to select them in order; each
+  selected image shows a numbered badge (1, 2, 3 …) so you can see exactly
+  which order they will be added.
+
+• Add to album (bulk) — while in bulk select mode, tap "Add to album" to
+  open the album picker. Each album shows how many of the selected images
+  are new to it. Selecting an album adds all chosen images in pick order,
+  then exits selection mode automatically.
+
+• Single-image add to album — the right-click "Add to album" option now
+  also shows how many images are already in each album, consistent with
+  the new bulk picker.
+
+ALBUM EXPORT
+
+• Export format picker — the export dialog now shows three clearly labelled
+  options: ZIP archive, PDF — Raw, and PDF — Compressed.
+
+• PDF — Compressed — a new export option that re-encodes each image as JPEG
+  at 75% quality before embedding, producing a significantly smaller PDF
+  compared to the raw option.
+
+• Export progress bar — after picking a save location, a progress dialog
+  shows a live progress bar and an "image X of Y" counter so you can see
+  how far along the export is.
+
+• Cancel export — a Cancel button in the progress dialog lets you stop the
+  export at any point. Any partially written file is cleaned up automatically
+  so no corrupted archive or PDF is left behind.
+
+ALBUM READER
+
+• Loop play — a loop toggle button (⟳) now appears next to the auto-play
+  controls in the reader toolbar. When enabled, auto-play jumps back to
+  the first page after the last one instead of stopping, cycling the album
+  indefinitely.
+
+• Keyboard shortcuts help — a new "?" button in the album reader and the
+  Gallery image viewer opens a quick reference for every keyboard shortcut
+  (navigation, zoom, auto-play).
+
+CHARACTER CARDS
+
+• Share image — the character card export dialog now has a "Share image"
+  option alongside "Save card". It saves a plain PNG with no hidden import
+  data, for posting anywhere without exposing your character file.
+
+BUG FIXES
+
+• Character thumbnail not refreshing — replacing a character's thumbnail
+  (via the thumbnail editor or the "Change thumbnail" option on a variant)
+  now shows the new image immediately without needing to restart the app.
+  The previous image was being served from Flutter's image cache even
+  after the file on disk was replaced.
+
+• Thumbnail not refreshing everywhere — changing a variant's thumbnail now
+  updates the variant card, the big character image in the detail screen,
+  and the character card on the home grid immediately. Previously the new
+  file replaced the old one at the same path, so the UI kept showing the
+  stale image until a manual refresh.
+'''),
   _PatchEntry('1.5.1', 'Album sort, favourites, card styles & Gallery settings', '''
 ALBUMS
 

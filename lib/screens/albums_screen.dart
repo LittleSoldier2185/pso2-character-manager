@@ -13,6 +13,7 @@ import '../models/tag_data.dart';
 import '../services/album_export_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/app_title_bar.dart';
+import '../widgets/shortcuts_help_dialog.dart';
 import '../widgets/tag_chip.dart';
 import 'character_detail_screen.dart';
 
@@ -1160,6 +1161,7 @@ class _AlbumDetailDialogState extends State<_AlbumDetailDialog> {
   final _transformCtrl = TransformationController();
   Size _readerSize = Size.zero;
   bool _autoPlay = false;
+  bool _autoPlayLoop = false;
   int _autoPlaySeconds = 3;
   Timer? _autoPlayTimer;
   int _autoPlayTotalPages = 0;
@@ -1258,37 +1260,150 @@ class _AlbumDetailDialogState extends State<_AlbumDetailDialog> {
       return;
     }
 
+    // 1 ── Format picker
     final choice = await showDialog<String>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dCtx) => AlertDialog(
         backgroundColor: AppTheme.bgCard,
         title: const Text('Export album', style: TextStyle(fontSize: 15)),
-        content: Text(
-          'Export "${album.name}" (${paths.length} image${paths.length == 1 ? '' : 's'}) as:',
-          style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Export "${album.name}" (${paths.length} image${paths.length == 1 ? '' : 's'}) as:',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            _ExportOption(
+              icon: Icons.folder_zip_outlined,
+              title: 'ZIP archive',
+              subtitle: 'All images packed into a single zip file',
+              onTap: () => Navigator.pop(dCtx, 'zip'),
+            ),
+            const SizedBox(height: 8),
+            _ExportOption(
+              icon: Icons.picture_as_pdf_outlined,
+              title: 'PDF — Raw',
+              subtitle: 'Full quality, larger file size',
+              onTap: () => Navigator.pop(dCtx, 'pdf_raw'),
+            ),
+            const SizedBox(height: 8),
+            _ExportOption(
+              icon: Icons.compress_rounded,
+              title: 'PDF — Compressed',
+              subtitle: 'JPEG re-encoded at 75% quality, smaller file size',
+              onTap: () => Navigator.pop(dCtx, 'pdf_compress'),
+            ),
+          ],
         ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(context, 'zip'),
-              child: const Text('ZIP')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(context, 'pdf'),
-              child: const Text('PDF')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
         ],
       ),
     );
     if (choice == null || !context.mounted) return;
 
-    final error = choice == 'zip'
-        ? await AlbumExportService.exportZip(album, paths)
-        : await AlbumExportService.exportPdf(album, paths);
+    // 2 ── File-save dialog (before showing progress)
+    final compress = choice == 'pdf_compress';
+    final String? savePath = choice == 'zip'
+        ? await AlbumExportService.pickZipSavePath(album)
+        : await AlbumExportService.pickPdfSavePath(album, compress: compress);
+    if (savePath == null || !context.mounted) return;
 
+    // 3 ── Progress dialog
+    final progress = ValueNotifier<(int, int)>((0, paths.length));
+    final cancelToken = ExportCancelToken();
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => PopScope(
+        canPop: false,
+        child: ValueListenableBuilder<(int, int)>(
+          valueListenable: progress,
+          builder: (_, v, __) {
+            final done = v.$1;
+            final total = v.$2;
+            return AlertDialog(
+              backgroundColor: AppTheme.bgCard,
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    done == 0
+                        ? 'Preparing…'
+                        : 'Exporting image $done of $total',
+                    style: TextStyle(
+                        color: AppTheme.textPrimary, fontSize: 13),
+                  ),
+                  const SizedBox(height: 12),
+                  LinearProgressIndicator(
+                    value: total == 0 ? null : done / total,
+                    color: AppTheme.accent,
+                    backgroundColor:
+                        AppTheme.accent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(4),
+                    minHeight: 6,
+                  ),
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Text(
+                      total == 0 ? '' : '$done / $total',
+                      style: TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => cancelToken.cancel(),
+                  child: Text('Cancel',
+                      style: TextStyle(color: AppTheme.textSecondary)),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+
+    // 4 ── Run export
+    final String? error;
+    if (choice == 'zip') {
+      error = await AlbumExportService.doExportZip(
+        savePath, paths,
+        onProgress: (done, total) => progress.value = (done, total),
+        cancelToken: cancelToken,
+      );
+    } else {
+      error = await AlbumExportService.doExportPdf(
+        savePath, paths,
+        compress: compress,
+        onProgress: (done, total) => progress.value = (done, total),
+        cancelToken: cancelToken,
+      );
+    }
+
+    progress.dispose();
     if (!context.mounted) return;
+    Navigator.pop(context); // dismiss progress dialog
+
+    if (cancelToken.isCancelled) return; // cancelled — no snackbar
+
+    final label = choice == 'zip'
+        ? 'ZIP'
+        : compress
+            ? 'Compressed PDF'
+            : 'PDF';
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(error ?? 'Exported as ${choice.toUpperCase()}'),
+      content: Text(error ?? 'Exported as $label'),
+      backgroundColor: error != null ? Colors.red : null,
     ));
   }
 
@@ -1303,6 +1418,8 @@ class _AlbumDetailDialogState extends State<_AlbumDetailDialog> {
     _autoPlayTimer = Timer.periodic(Duration(seconds: _autoPlaySeconds), (_) {
       if (_currentPage < _autoPlayTotalPages - 1) {
         _nextPage();
+      } else if (_autoPlayLoop) {
+        _pageCtrl.jumpToPage(0);
       } else {
         _stopAutoPlay();
       }
@@ -1747,6 +1864,17 @@ class _AlbumDetailDialogState extends State<_AlbumDetailDialog> {
                     ? _stopAutoPlay()
                     : _startAutoPlay(pageCount),
               ),
+              IconButton(
+                icon: Icon(
+                  Icons.loop_rounded,
+                  size: 18,
+                  color: _autoPlayLoop ? AppTheme.accent : Colors.white30,
+                ),
+                tooltip: _autoPlayLoop ? 'Loop: on' : 'Loop: off',
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(),
+                onPressed: () => setState(() => _autoPlayLoop = !_autoPlayLoop),
+              ),
               const SizedBox(width: 4),
               // Mode buttons
               _ReaderModeBtn(
@@ -1766,6 +1894,15 @@ class _AlbumDetailDialogState extends State<_AlbumDetailDialog> {
                 tooltip: '2-page spread',
                 active: _readerMode == _ReaderMode.book,
                 onTap: () => _setReaderMode(_ReaderMode.book),
+              ),
+              const SizedBox(width: 4),
+              IconButton(
+                icon: const Icon(Icons.help_outline, size: 18),
+                tooltip: 'Keyboard shortcuts',
+                color: Colors.white54,
+                padding: const EdgeInsets.all(4),
+                constraints: const BoxConstraints(),
+                onPressed: () => showShortcutsHelpDialog(context),
               ),
               const SizedBox(width: 4),
               IconButton(
@@ -3166,6 +3303,60 @@ class _NavBtn extends StatelessWidget {
           child: Icon(icon, color: Colors.white, size: 22),
         ),
       );
+}
+
+class _ExportOption extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  const _ExportOption({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.bgSurface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: AppTheme.borderColor),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 20, color: AppTheme.accent),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500)),
+                  const SizedBox(height: 2),
+                  Text(subtitle,
+                      style: TextStyle(
+                          color: AppTheme.textSecondary, fontSize: 11)),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right_rounded,
+                size: 16, color: AppTheme.textSecondary),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _DetailBtn extends StatelessWidget {

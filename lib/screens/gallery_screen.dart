@@ -12,6 +12,7 @@ import '../providers/character_provider.dart';
 import '../services/data_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/skeleton.dart';
+import '../widgets/shortcuts_help_dialog.dart';
 import 'character_detail_screen.dart';
 
 class GalleryScreen extends StatefulWidget {
@@ -25,6 +26,8 @@ class _GalleryScreenState extends State<GalleryScreen> {
   String? _filterCharacterId;
   String _search = '';
   int _sizeIndex = 3; // 0=S,1=M,2=L,3=XL
+  bool _bulkMode = false;
+  final List<String> _bulkSelected = []; // ordered by pick time
 
   // maxCrossAxisExtent per size
   static const List<double> _sizeExtents = [100, 160, 220, 300];
@@ -80,6 +83,30 @@ class _GalleryScreenState extends State<GalleryScreen> {
     await context.read<CharacterProvider>().toggleGalleryItemBlur(item);
   }
 
+  void _toggleSelect(String itemId) {
+    setState(() {
+      if (_bulkSelected.contains(itemId)) {
+        _bulkSelected.remove(itemId);
+      } else {
+        _bulkSelected.add(itemId);
+      }
+    });
+  }
+
+  void _exitBulk() => setState(() { _bulkMode = false; _bulkSelected.clear(); });
+
+  Future<void> _bulkAddToAlbum(BuildContext context) async {
+    final albums = context.read<CharacterProvider>().allAlbums;
+    await showDialog(
+      context: context,
+      builder: (_) => _AddToAlbumDialog(
+        itemIds: List.from(_bulkSelected),
+        albums: albums,
+      ),
+    );
+    _exitBulk();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<CharacterProvider>(
@@ -123,73 +150,127 @@ class _GalleryScreenState extends State<GalleryScreen> {
                 border: Border(
                     bottom: BorderSide(color: AppTheme.borderColor)),
               ),
-              child: Row(
-                children: [
-                  Text(
-                    items.isEmpty
-                        ? 'Gallery'
-                        : '${items.length} image${items.length == 1 ? '' : 's'}',
-                    style: TextStyle(
-                        color: AppTheme.textPrimary,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500),
-                  ),
-                  const Spacer(),
-                  // Size picker dropdown
-                  PopupMenuButton<int>(
-                    color: AppTheme.bgCard,
-                    tooltip: 'Gallery size',
-                    icon: Icon(
-                      _gallerySizeIcon(_sizeIndex),
-                      size: 16,
-                      color: AppTheme.textSecondary,
+              child: _bulkMode
+                  ? Row(
+                      children: [
+                        Icon(Icons.checklist_rounded,
+                            size: 15, color: AppTheme.accent),
+                        const SizedBox(width: 8),
+                        Text(
+                          _bulkSelected.isEmpty
+                              ? 'Select images'
+                              : '${_bulkSelected.length} selected',
+                          style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500),
+                        ),
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: _bulkSelected.isNotEmpty
+                              ? () => _bulkAddToAlbum(context)
+                              : null,
+                          icon: const Icon(
+                              Icons.photo_album_outlined, size: 14),
+                          label: const Text('Add to album'),
+                          style: TextButton.styleFrom(
+                              foregroundColor: AppTheme.accent,
+                              textStyle: const TextStyle(fontSize: 13)),
+                        ),
+                        const SizedBox(width: 4),
+                        TextButton(
+                          onPressed: _exitBulk,
+                          child: const Text('Cancel'),
+                          style: TextButton.styleFrom(
+                              foregroundColor: AppTheme.textSecondary,
+                              textStyle: const TextStyle(fontSize: 13)),
+                        ),
+                      ],
+                    )
+                  : Row(
+                      children: [
+                        Text(
+                          items.isEmpty
+                              ? 'Gallery'
+                              : '${items.length} image${items.length == 1 ? '' : 's'}',
+                          style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500),
+                        ),
+                        const Spacer(),
+                        // Select button
+                        if (items.isNotEmpty)
+                          Tooltip(
+                            message: 'Select images',
+                            child: IconButton(
+                              onPressed: () =>
+                                  setState(() => _bulkMode = true),
+                              icon: const Icon(
+                                  Icons.checklist_rounded, size: 16),
+                              color: AppTheme.textSecondary,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              splashRadius: 16,
+                            ),
+                          ),
+                        const SizedBox(width: 8),
+                        // Size picker dropdown
+                        PopupMenuButton<int>(
+                          color: AppTheme.bgCard,
+                          tooltip: 'Gallery size',
+                          icon: Icon(
+                            _gallerySizeIcon(_sizeIndex),
+                            size: 16,
+                            color: AppTheme.textSecondary,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            side: BorderSide(color: AppTheme.borderColor),
+                          ),
+                          onSelected: (i) async {
+                            setState(() => _sizeIndex = i);
+                            await DataService.instance.saveGallerySize(i);
+                          },
+                          itemBuilder: (_) => [
+                            _gallerySizeItem(3, 'Extra large',
+                                Icons.crop_free_rounded),
+                            _gallerySizeItem(2, 'Large',
+                                Icons.view_agenda_outlined),
+                            _gallerySizeItem(1, 'Medium',
+                                Icons.grid_view_rounded),
+                            _gallerySizeItem(0, 'Small',
+                                Icons.grid_on_rounded),
+                          ],
+                        ),
+                        const SizedBox(width: 8),
+                        // Search bar
+                        SizedBox(
+                          width: 200,
+                          child: TextField(
+                            onChanged: (v) => setState(() => _search = v),
+                            decoration: InputDecoration(
+                              hintText: 'Search by character…',
+                              prefixIcon: Icon(Icons.search_rounded,
+                                  size: 15, color: AppTheme.textSecondary),
+                              suffixIcon: _search.isNotEmpty
+                                  ? IconButton(
+                                      icon:
+                                          const Icon(Icons.clear, size: 14),
+                                      onPressed: () =>
+                                          setState(() => _search = ''),
+                                    )
+                                  : null,
+                              contentPadding:
+                                  const EdgeInsets.symmetric(vertical: 8),
+                              isDense: true,
+                            ),
+                            style: TextStyle(
+                                color: AppTheme.textPrimary, fontSize: 12),
+                          ),
+                        ),
+                      ],
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      side: BorderSide(color: AppTheme.borderColor),
-                    ),
-                    onSelected: (i) async {
-                      setState(() => _sizeIndex = i);
-                      await DataService.instance.saveGallerySize(i);
-                    },
-                    itemBuilder: (_) => [
-                      _gallerySizeItem(3, 'Extra large',
-                          Icons.crop_free_rounded),
-                      _gallerySizeItem(2, 'Large',
-                          Icons.view_agenda_outlined),
-                      _gallerySizeItem(1, 'Medium',
-                          Icons.grid_view_rounded),
-                      _gallerySizeItem(0, 'Small',
-                          Icons.grid_on_rounded),
-                    ],
-                  ),
-                  const SizedBox(width: 8),
-                  // Search bar
-                  SizedBox(
-                    width: 200,
-                    child: TextField(
-                      onChanged: (v) => setState(() => _search = v),
-                      decoration: InputDecoration(
-                        hintText: 'Search by character…',
-                        prefixIcon: Icon(Icons.search_rounded,
-                            size: 15, color: AppTheme.textSecondary),
-                        suffixIcon: _search.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 14),
-                                onPressed: () =>
-                                    setState(() => _search = ''),
-                              )
-                            : null,
-                        contentPadding:
-                            const EdgeInsets.symmetric(vertical: 8),
-                        isDense: true,
-                      ),
-                      style: TextStyle(
-                          color: AppTheme.textPrimary, fontSize: 12),
-                    ),
-                  ),
-                ],
-              ),
             ),
 
             // ── Character filter chips ────────────────────────
@@ -261,6 +342,7 @@ class _GalleryScreenState extends State<GalleryScreen> {
                         final item = items[index];
                         final char =
                             _charForItem(item, characters);
+                        final selIdx = _bulkSelected.indexOf(item.id);
                         return _GalleryGridCell(
                           item: item,
                           character: char,
@@ -279,6 +361,10 @@ class _GalleryScreenState extends State<GalleryScreen> {
                                   )
                               : null,
                           onDelete: () => _confirmDelete(context, item),
+                          bulkMode: _bulkMode,
+                          selectionOrder:
+                              selIdx >= 0 ? selIdx + 1 : null,
+                          onSelect: () => _toggleSelect(item.id),
                         );
                       },
                     ),
@@ -440,6 +526,9 @@ class _GalleryGridCell extends StatefulWidget {
   final VoidCallback onToggleBlur;
   final VoidCallback? onCharacterTap;
   final VoidCallback onDelete;
+  final bool bulkMode;
+  final int? selectionOrder; // null = not selected; 1+ = pick order
+  final VoidCallback? onSelect;
 
   const _GalleryGridCell({
     required this.item,
@@ -451,6 +540,9 @@ class _GalleryGridCell extends StatefulWidget {
     required this.onToggleBlur,
     required this.onCharacterTap,
     required this.onDelete,
+    this.bulkMode = false,
+    this.selectionOrder,
+    this.onSelect,
   });
 
   @override
@@ -520,7 +612,7 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
     final albums = context.read<CharacterProvider>().allAlbums;
     await showDialog(
       context: context,
-      builder: (_) => _AddToAlbumDialog(itemId: widget.item.id, albums: albums),
+      builder: (_) => _AddToAlbumDialog(itemIds: [widget.item.id], albums: albums),
     );
   }
 
@@ -607,12 +699,18 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
         ? AppTheme.raceColor(widget.character!.race)
         : AppTheme.textSecondary;
 
+    final isSelected = widget.selectionOrder != null;
+
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: GestureDetector(
-        onTap: fileExists ? _viewFullscreen : null,
-        onSecondaryTapUp: fileExists
+        onTap: widget.bulkMode
+            ? widget.onSelect
+            : fileExists
+                ? _viewFullscreen
+                : null,
+        onSecondaryTapUp: (!widget.bulkMode && fileExists)
             ? (d) => _showContextMenu(context, d.globalPosition)
             : null,
         child: Container(
@@ -620,9 +718,12 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
             color: AppTheme.bgSurface,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-                color: _hovered
-                    ? AppTheme.accent.withOpacity(0.5)
-                    : AppTheme.borderColor),
+                color: isSelected
+                    ? AppTheme.accent
+                    : _hovered
+                        ? AppTheme.accent.withOpacity(0.5)
+                        : AppTheme.borderColor,
+                width: isSelected ? 2 : 1),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -705,8 +806,56 @@ class _GalleryGridCellState extends State<_GalleryGridCell> {
                         ),
                       ),
 
+                    // Bulk selection overlay + number badge
+                    if (widget.bulkMode) ...[
+                      if (isSelected)
+                        Positioned.fill(
+                          child: ClipRRect(
+                            borderRadius: widget.infoLevel == 0
+                                ? BorderRadius.circular(6)
+                                : const BorderRadius.vertical(
+                                    top: Radius.circular(6)),
+                            child: ColoredBox(
+                              color:
+                                  AppTheme.accent.withValues(alpha: 0.18),
+                            ),
+                          ),
+                        ),
+                      Positioned(
+                        top: 6,
+                        left: 6,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 120),
+                          width: 22,
+                          height: 22,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? AppTheme.accent
+                                : Colors.black.withValues(alpha: 0.35),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: Colors.white.withValues(alpha: 0.7),
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Center(
+                            child: isSelected
+                                ? Text(
+                                    '${widget.selectionOrder}',
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold),
+                                  )
+                                : const Icon(Icons.add_rounded,
+                                    size: 12, color: Colors.white70),
+                          ),
+                        ),
+                      ),
+                    ],
+
                     // Hover controls
-                    if (_hovered) ...[
+                    if (!widget.bulkMode && _hovered) ...[
                       Positioned(
                         top: 4,
                         left: 4,
@@ -1023,6 +1172,23 @@ class _FullscreenViewerState extends State<_FullscreenViewer> {
                     );
             },
           ),
+          // Shortcuts help
+          Positioned(
+            top: 8,
+            right: 44,
+            child: GestureDetector(
+              onTap: () => showShortcutsHelpDialog(context),
+              child: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.6),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Icon(Icons.help_outline,
+                    color: Colors.white, size: 18),
+              ),
+            ),
+          ),
           // Close
           Positioned(
             top: 8,
@@ -1238,10 +1404,10 @@ class _FullscreenViewerState extends State<_FullscreenViewer> {
 // ── Add-to-album dialog ────────────────────────────────────────────
 
 class _AddToAlbumDialog extends StatefulWidget {
-  final String itemId;
+  final List<String> itemIds;
   final List<AlbumData> albums;
 
-  const _AddToAlbumDialog({required this.itemId, required this.albums});
+  const _AddToAlbumDialog({required this.itemIds, required this.albums});
 
   @override
   State<_AddToAlbumDialog> createState() => _AddToAlbumDialogState();
@@ -1259,7 +1425,12 @@ class _AddToAlbumDialogState extends State<_AddToAlbumDialog> {
     final provider = context.read<CharacterProvider>();
     return AlertDialog(
       backgroundColor: AppTheme.bgCard,
-      title: const Text('Add to album', style: TextStyle(fontSize: 15)),
+      title: Text(
+        widget.itemIds.length > 1
+            ? 'Add ${widget.itemIds.length} images to album'
+            : 'Add to album',
+        style: const TextStyle(fontSize: 15),
+      ),
       content: SizedBox(
         width: 280,
         child: Column(
@@ -1272,7 +1443,10 @@ class _AddToAlbumDialogState extends State<_AddToAlbumDialog> {
                     style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
               ),
             ...widget.albums.map((album) {
-              final already = album.itemIds.contains(widget.itemId);
+              final newCount = widget.itemIds
+                  .where((id) => !album.itemIds.contains(id))
+                  .length;
+              final already = newCount == 0;
               return ListTile(
                 dense: true,
                 contentPadding: EdgeInsets.zero,
@@ -1284,11 +1458,15 @@ class _AddToAlbumDialogState extends State<_AddToAlbumDialog> {
                 title: Text(album.name,
                     style: TextStyle(color: AppTheme.textPrimary, fontSize: 13)),
                 subtitle: Text(
-                  '${album.itemIds.length} image${album.itemIds.length == 1 ? '' : 's'}',
+                  already
+                      ? 'Already added'
+                      : widget.itemIds.length > 1
+                          ? 'Adds $newCount image${newCount == 1 ? '' : 's'}'
+                          : '${album.itemIds.length} image${album.itemIds.length == 1 ? '' : 's'}',
                   style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
                 ),
                 onTap: already ? null : () async {
-                  await provider.addItemToAlbum(album, widget.itemId);
+                  await provider.addItemsToAlbum(album, widget.itemIds);
                   if (context.mounted) Navigator.pop(context);
                 },
               );
@@ -1304,7 +1482,7 @@ class _AddToAlbumDialogState extends State<_AddToAlbumDialog> {
                 onSubmitted: (name) async {
                   if (name.trim().isEmpty) return;
                   final album = await provider.createAlbum(name.trim());
-                  await provider.addItemToAlbum(album, widget.itemId);
+                  await provider.addItemsToAlbum(album, widget.itemIds);
                   if (context.mounted) Navigator.pop(context);
                 },
               ),
@@ -1328,7 +1506,7 @@ class _AddToAlbumDialogState extends State<_AddToAlbumDialog> {
               final name = _ctrl.text.trim();
               if (name.isEmpty) return;
               final album = await provider.createAlbum(name);
-              await provider.addItemToAlbum(album, widget.itemId);
+              await provider.addItemsToAlbum(album, widget.itemIds);
               if (context.mounted) Navigator.pop(context);
             },
             child: const Text('Create & add'),

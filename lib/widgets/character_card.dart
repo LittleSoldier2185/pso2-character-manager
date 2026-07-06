@@ -330,6 +330,7 @@ class CharacterCard extends StatelessWidget {
       if (file.existsSync()) {
         Widget img = Image.file(
           file,
+          key: ValueKey(file.lastModifiedSync()),
           fit: BoxFit.cover,
           frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
             if (wasSynchronouslyLoaded || frame != null) return child;

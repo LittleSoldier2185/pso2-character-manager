@@ -357,9 +357,13 @@ class _CharacterDetailScreenState extends State<CharacterDetailScreen> {
                                         imageFilter: ImageFilter.blur(
                                             sigmaX: 18, sigmaY: 18),
                                         child: Image.file(File(thumbPath!),
+                                            key: ValueKey(File(thumbPath)
+                                                .lastModifiedSync()),
                                             fit: BoxFit.cover),
                                       )
                                     : Image.file(File(thumbPath!),
+                                        key: ValueKey(File(thumbPath)
+                                            .lastModifiedSync()),
                                         fit: BoxFit.cover),
                               ),
                               if (!_isEditing) ...[
@@ -2383,9 +2387,13 @@ class _VariantCard extends StatelessWidget {
                         ? ImageFiltered(
                             imageFilter:
                                 ImageFilter.blur(sigmaX: 18, sigmaY: 18),
-                            child: Image.file(thumbFile!, fit: BoxFit.cover),
+                            child: Image.file(thumbFile!,
+                                key: ValueKey(thumbFile.lastModifiedSync()),
+                                fit: BoxFit.cover),
                           )
-                        : Image.file(thumbFile!, fit: BoxFit.cover)
+                        : Image.file(thumbFile!,
+                            key: ValueKey(thumbFile.lastModifiedSync()),
+                            fit: BoxFit.cover)
                     : Container(
                         color: AppTheme.bgCard,
                         child: Icon(Icons.person_outline_rounded,

@@ -750,6 +750,7 @@ class CharacterProvider extends ChangeNotifier {
   Future<void> removeCharacterThumbnail(CharacterData character) async {
     final thumbPath = character.thumbnailForVariant(character.mainVariant);
     if (thumbPath != null) {
+      await FileImage(File(thumbPath)).evict();
       final f = File(thumbPath);
       if (await f.exists()) await f.delete();
     }
@@ -761,9 +762,9 @@ class CharacterProvider extends ChangeNotifier {
 
   Future<void> updateCharacterThumbnail(
       CharacterData character, String newSourcePath) async {
-    // Remove old thumbnail for main variant
     final oldThumb = character.thumbnailForVariant(character.mainVariant);
     if (oldThumb != null) {
+      await FileImage(File(oldThumb)).evict();
       final f = File(oldThumb);
       if (await f.exists()) await f.delete();
     }
@@ -1194,6 +1195,15 @@ class CharacterProvider extends ChangeNotifier {
   Future<void> addItemToAlbum(AlbumData album, String itemId) async {
     if (album.itemIds.contains(itemId)) return;
     album.itemIds.add(itemId);
+    album.updatedAt = DateTime.now();
+    await _data.saveAlbums(_albums);
+    notifyListeners();
+  }
+
+  Future<void> addItemsToAlbum(AlbumData album, List<String> itemIds) async {
+    for (final id in itemIds) {
+      if (!album.itemIds.contains(id)) album.itemIds.add(id);
+    }
     album.updatedAt = DateTime.now();
     await _data.saveAlbums(_albums);
     notifyListeners();
@@ -2001,7 +2011,10 @@ class CharacterProvider extends ChangeNotifier {
         if (entity is File) {
           final name =
               p.basenameWithoutExtension(entity.path).toLowerCase();
-          if (name.contains('thumbnail')) await entity.delete();
+          if (name.contains('thumbnail')) {
+            await FileImage(File(entity.path)).evict();
+            await entity.delete();
+          }
         }
       }
     }

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:file_picker/file_picker.dart';
@@ -25,6 +26,46 @@ class _ExportCardDialogState extends State<ExportCardDialog> {
   final _cardKey = GlobalKey();
   bool _exporting = false;
 
+  Future<Uint8List> _capturePng() async {
+    final boundary =
+        _cardKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+    final image = await boundary.toImage(pixelRatio: 2.0);
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+    return byteData!.buffer.asUint8List();
+  }
+
+  Future<void> _share() async {
+    final exportName = widget.variant?.displayName ?? widget.character.name;
+    final safeName = exportName.replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+
+    final savePath = await FilePicker.platform.saveFile(
+      dialogTitle: 'Save character image',
+      fileName: '$safeName.png',
+      type: FileType.image,
+      allowedExtensions: ['png'],
+    );
+    if (savePath == null || !mounted) return;
+
+    setState(() => _exporting = true);
+    try {
+      final pngBytes = await _capturePng();
+      await File(savePath).writeAsBytes(pngBytes);
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Image saved — plain PNG, no character data included'),
+        backgroundColor: Colors.green,
+      ));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Export failed: $e'), backgroundColor: Colors.red));
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   Future<void> _export() async {
     final provider = context.read<CharacterProvider>();
     final exportName = widget.variant?.displayName ?? widget.character.name;
@@ -41,12 +82,7 @@ class _ExportCardDialogState extends State<ExportCardDialog> {
     setState(() => _exporting = true);
 
     try {
-      // Capture card widget as PNG
-      final boundary =
-          _cardKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
-      final image = await boundary.toImage(pixelRatio: 2.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      final pngBytes = byteData!.buffer.asUint8List();
+      final pngBytes = await _capturePng();
 
       final resolvedTags = widget.character.tags
           .map((id) => provider.tagById(id))
@@ -123,7 +159,9 @@ class _ExportCardDialogState extends State<ExportCardDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Exports a PNG image with character data embedded inside.\nAnyone can import it directly into PSO2 Character Manager.',
+              '"Save card" embeds character data so it can be imported into PSO2 '
+              'Character Manager. "Share image" saves a plain PNG with no hidden '
+              'data — for posting anywhere.',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
             ),
             const SizedBox(height: 16),
@@ -159,6 +197,11 @@ class _ExportCardDialogState extends State<ExportCardDialog> {
         TextButton(
           onPressed: _exporting ? null : () => Navigator.pop(context),
           child: const Text('Cancel'),
+        ),
+        OutlinedButton.icon(
+          onPressed: _exporting ? null : _share,
+          icon: const Icon(Icons.share_outlined, size: 15),
+          label: const Text('Share image'),
         ),
         ElevatedButton.icon(
           onPressed: _exporting ? null : _export,
