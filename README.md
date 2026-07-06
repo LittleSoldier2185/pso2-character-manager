@@ -125,3 +125,7 @@ flutter build windows --release
 ## License
 
 MIT License — free to use, modify, and share.
+
+---
+
+Contract me at : marystudio3003@gmail.com
